@@ -1,12 +1,12 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  AUTHENTIC WINDY.COM METEOROLOGICAL MAP ENGINE v7.0
- *  ─ 100% Watermark-Free Terrain Relief (Esri Gray + Shaded Relief, NO Carto API Key Error!)
- *  ─ Crisp Natural Earth Vector Coastlines & Country Borders Drawn Above Color Layer
- *  ─ High-Resolution 13x13 (169-Point) + 46 Real Station Residual Blending (Open-Meteo)
- *  ─ Delicate, Airy Windy.com Streamlines (Sparse & Subtle — Never Obscures Map!)
- *  ─ Outlined Two-Line City Labels + Colored Weather Dots (No Heavy Black Boxes!)
- *  ─ Floating Full-Bleed Windy UI: Search Pill, Right Icon Menu, Inline Color Strip
+ *  AUTHENTIC WINDY.COM METEOROLOGICAL MAP ENGINE v8.0 (ULTRA-CLEAR EDITION)
+ *  ─ Dual-Stroke Vector Coastlines & Borders (Visible on Both Dark & Bright Colors!)
+ *  ─ Balanced Translucent Weather Heatmap Over Clean Terrain (Zero Watermarks!)
+ *  ─ Quick Region Switcher: Toàn Việt Nam, Bắc Bộ, Trung Bộ, Nam Bộ, Biển Đông, ĐNÁ
+ *  ─ 56 Vietnam Provinces/Islands & Asian Cities with High-Contrast Value Pills
+ *  ─ Subtle, Airy 60 FPS Wind Streamlines + On-Map Windy Flag Picker
+ *  ─ 100% Real Open-Meteo 169-Point Grid + 56-Station Multi-Batch API
  * ═══════════════════════════════════════════════════════════════════════════
  */
 (function () {
@@ -17,132 +17,152 @@
   ══════════════════════════════════════════════════════════════ */
   const DEG2RAD      = Math.PI / 180;
   const RAD2DEG      = 180 / Math.PI;
-  const GRID_ROWS    = 13; // 13 x 13 = 169 real Open-Meteo grid points!
+  const GRID_ROWS    = 13; // 13 x 13 = 169 real Open-Meteo grid points
   const GRID_COLS    = 13;
   const RASTER_SCALE = 4;
   const LUT_SIZE     = 1024;
 
-  /* 46 Địa danh & Trạm quan trắc thực tế phủ rộng Việt Nam, Biển Đông & Châu Á */
+  /* Các vùng xem nhanh giúp quan sát Việt Nam & khu vực cực kỳ thuận tiện */
+  const QUICK_REGIONS = [
+    { id: 'vn',      label: '🇻🇳 Toàn Việt Nam', lat: 16.10, lon: 107.20, zoom: 6 },
+    { id: 'north',   label: '⛰️ Bắc Bộ',        lat: 21.25, lon: 105.65, zoom: 7 },
+    { id: 'central', label: '🌊 Trung Bộ',      lat: 15.65, lon: 108.05, zoom: 7 },
+    { id: 'south',   label: '🌴 Nam Bộ',        lat: 10.35, lon: 105.85, zoom: 7 },
+    { id: 'sea',     label: '🏝️ Biển Đông',     lat: 13.50, lon: 112.20, zoom: 6 },
+    { id: 'asia',    label: '🌏 Đông Nam Á',    lat: 15.20, lon: 106.50, zoom: 5 }
+  ];
+
+  /* 56 Tỉnh thành, Hải đảo Việt Nam & Thành phố Châu Á (100% Dữ liệu thực Open-Meteo) */
   const NOTABLE_CITIES = [
-    // Việt Nam - Trọng điểm (Priority 1)
+    // Việt Nam - Trọng điểm & Quần đảo tiền tiêu (Priority 1 - Luôn ưu tiên hiển thị)
     { n: 'Hà Nội',         lat: 21.0285, lon: 105.8542, priority: 1 },
     { n: 'TP.HCM',         lat: 10.8231, lon: 106.6297, priority: 1 },
     { n: 'Đà Nẵng',        lat: 16.0544, lon: 108.2022, priority: 1 },
-    { n: 'Hoàng Sa',       lat: 16.5333, lon: 111.6167, priority: 1, isIsland: true },
-    { n: 'Trường Sa',      lat: 8.6439,  lon: 111.9189, priority: 1, isIsland: true },
-    // Việt Nam - Tỉnh thành & Hải đảo (Priority 2 & 3)
-    { n: 'Hải Phòng',      lat: 20.8449, lon: 106.6881, priority: 2 },
-    { n: 'Vinh',           lat: 18.6734, lon: 105.6923, priority: 2 },
-    { n: 'Huế',            lat: 16.4637, lon: 107.5909, priority: 2 },
-    { n: 'Quy Nhơn',       lat: 13.7820, lon: 109.2194, priority: 2 },
-    { n: 'Nha Trang',      lat: 12.2388, lon: 109.1967, priority: 2 },
-    { n: 'Đà Lạt',         lat: 11.9404, lon: 108.4583, priority: 2 },
-    { n: 'Cần Thơ',        lat: 10.0452, lon: 105.7469, priority: 2 },
-    { n: 'Phú Quốc',       lat: 10.2899, lon: 103.9840, priority: 2, isIsland: true },
-    { n: 'Cà Mau',         lat: 9.1769,  lon: 105.1524, priority: 2 },
+    { n: 'QĐ. Hoàng Sa',   lat: 16.5333, lon: 111.6167, priority: 1, isIsland: true },
+    { n: 'QĐ. Trường Sa',  lat: 8.6439,  lon: 111.9189, priority: 1, isIsland: true },
+    { n: 'Hải Phòng',      lat: 20.8449, lon: 106.6881, priority: 1 },
+    { n: 'Vinh',           lat: 18.6734, lon: 105.6923, priority: 1 },
+    { n: 'Huế',            lat: 16.4637, lon: 107.5909, priority: 1 },
+    { n: 'Nha Trang',      lat: 12.2388, lon: 109.1967, priority: 1 },
+    { n: 'Cần Thơ',        lat: 10.0452, lon: 105.7469, priority: 1 },
+    { n: 'Phú Quốc',       lat: 10.2899, lon: 103.9840, priority: 1, isIsland: true },
+    // Việt Nam - Tỉnh thành miền Bắc (Priority 2 & 3)
     { n: 'Lào Cai',        lat: 22.4856, lon: 103.9707, priority: 2 },
-    { n: 'Sơn La',         lat: 21.3256, lon: 103.9188, priority: 3 },
-    { n: 'Lạng Sơn',       lat: 21.8537, lon: 106.7615, priority: 3 },
-    { n: 'Hạ Long',        lat: 20.9517, lon: 107.0748, priority: 3 },
-    { n: 'Thanh Hóa',      lat: 19.8067, lon: 105.7852, priority: 3 },
-    { n: 'Đồng Hới',       lat: 17.4689, lon: 106.6223, priority: 3 },
-    { n: 'Quảng Ngãi',     lat: 15.1214, lon: 108.8044, priority: 3 },
+    { n: 'Hà Giang',       lat: 22.8233, lon: 104.9836, priority: 2 },
+    { n: 'Cao Bằng',       lat: 22.6657, lon: 106.2579, priority: 2 },
+    { n: 'Điện Biên',      lat: 21.3860, lon: 103.0230, priority: 2 },
+    { n: 'Sơn La',         lat: 21.3256, lon: 103.9188, priority: 2 },
+    { n: 'Lạng Sơn',       lat: 21.8537, lon: 106.7615, priority: 2 },
+    { n: 'Hạ Long',        lat: 20.9517, lon: 107.0748, priority: 2 },
+    { n: 'Thái Nguyên',    lat: 21.5942, lon: 105.8482, priority: 3 },
+    { n: 'Việt Trì',       lat: 21.3227, lon: 105.4020, priority: 3 },
+    { n: 'Nam Định',       lat: 20.4388, lon: 106.1621, priority: 3 },
+    { n: 'Ninh Bình',      lat: 20.2506, lon: 105.9745, priority: 3 },
+    { n: 'Bạch Long Vĩ',   lat: 20.1333, lon: 107.7333, priority: 2, isIsland: true },
+    // Việt Nam - Miền Trung & Tây Nguyên (Priority 2 & 3)
+    { n: 'Thanh Hóa',      lat: 19.8067, lon: 105.7852, priority: 2 },
+    { n: 'Hà Tĩnh',        lat: 18.3428, lon: 105.9057, priority: 3 },
+    { n: 'Đồng Hới',       lat: 17.4689, lon: 106.6223, priority: 2 },
+    { n: 'Đông Hà',        lat: 16.8163, lon: 107.1003, priority: 3 },
+    { n: 'Quảng Ngãi',     lat: 15.1214, lon: 108.8044, priority: 2 },
+    { n: 'Kon Tum',        lat: 14.3545, lon: 108.0076, priority: 3 },
     { n: 'Pleiku',         lat: 13.9833, lon: 108.0000, priority: 2 },
-    { n: 'Buôn Ma Thuột',  lat: 12.6667, lon: 108.0500, priority: 3 },
-    { n: 'Phan Thiết',     lat: 10.9289, lon: 108.1021, priority: 3 },
-    { n: 'Vũng Tàu',       lat: 10.3460, lon: 107.0843, priority: 3 },
+    { n: 'Quy Nhơn',       lat: 13.7820, lon: 109.2194, priority: 2 },
+    { n: 'Tuy Hòa',        lat: 13.0955, lon: 109.3209, priority: 3 },
+    { n: 'Buôn Ma Thuột',  lat: 12.6667, lon: 108.0500, priority: 2 },
+    { n: 'Đà Lạt',         lat: 11.9404, lon: 108.4583, priority: 2 },
+    { n: 'Phan Thiết',     lat: 10.9289, lon: 108.1021, priority: 2 },
+    // Việt Nam - Miền Nam (Priority 2 & 3)
+    { n: 'Tây Ninh',       lat: 11.3100, lon: 106.0983, priority: 3 },
+    { n: 'Biên Hòa',       lat: 10.9574, lon: 106.8427, priority: 3 },
+    { n: 'Vũng Tàu',       lat: 10.3460, lon: 107.0843, priority: 2 },
+    { n: 'Mỹ Tho',         lat: 10.3600, lon: 106.3600, priority: 3 },
+    { n: 'Châu Đốc',       lat: 10.7011, lon: 105.1119, priority: 3 },
+    { n: 'Rạch Giá',       lat: 10.0125, lon: 105.0808, priority: 2 },
+    { n: 'Sóc Trăng',      lat: 9.6025,  lon: 105.9739, priority: 3 },
+    { n: 'Bạc Liêu',       lat: 9.2941,  lon: 105.7278, priority: 3 },
+    { n: 'Cà Mau',         lat: 9.1769,  lon: 105.1524, priority: 2 },
     { n: 'Côn Đảo',        lat: 8.6833,  lon: 106.6000, priority: 2, isIsland: true },
-    // Khu vực Đông Nam Á, Đông Á & Nam Á (Giống góc nhìn Windy.com)
+    // Quốc tế lân cận
     { n: 'Vientiane',      lat: 17.9757, lon: 102.6331, priority: 1 },
-    { n: 'Luang Prabang',  lat: 19.8856, lon: 102.1347, priority: 3 },
     { n: 'Phnom Penh',     lat: 11.5564, lon: 104.9282, priority: 1 },
-    { n: 'Siem Reap',      lat: 13.3671, lon: 103.8448, priority: 3 },
     { n: 'Bangkok',        lat: 13.7563, lon: 100.5018, priority: 1 },
     { n: 'Chiang Mai',     lat: 18.7883, lon: 98.9853,  priority: 2 },
-    { n: 'Surat Thani',    lat: 9.1382,  lon: 99.3215,  priority: 2 },
-    { n: 'Yangon',         lat: 16.8409, lon: 96.1735,  priority: 1 },
-    { n: 'Mandalay',       lat: 21.9588, lon: 96.0891,  priority: 2 },
+    { n: 'Yangon',         lat: 16.8409, lon: 96.1735,  priority: 2 },
     { n: 'Hải Khẩu',       lat: 20.0440, lon: 110.3200, priority: 1 },
     { n: 'Nam Ninh',       lat: 22.8170, lon: 108.3665, priority: 2 },
-    { n: 'Côn Minh',       lat: 25.0389, lon: 102.7183, priority: 2 },
-    { n: 'Quảng Châu',     lat: 23.1291, lon: 113.2644, priority: 2 },
     { n: 'Hong Kong',      lat: 22.3193, lon: 114.1694, priority: 1 },
     { n: 'Đài Bắc',        lat: 25.0330, lon: 121.5654, priority: 1 },
-    { n: 'Cao Hùng',       lat: 22.6273, lon: 120.3014, priority: 2 },
     { n: 'Manila',         lat: 14.5995, lon: 120.9842, priority: 1 },
-    { n: 'Cebu',           lat: 10.3157, lon: 123.8854, priority: 2 },
-    { n: 'Kuala Lumpur',   lat: 3.1390,  lon: 101.6869, priority: 2 },
-    { n: 'Singapore',      lat: 1.3521,  lon: 103.8198, priority: 1 }
+    { n: 'Singapore',      lat: 1.3521,  lon: 103.8198, priority: 2 }
   ];
 
-  /* Nhãn Quốc gia & Vùng biển kiểu bản đồ khí tượng Windy.com */
+  /* Nhãn Quốc gia & Vùng biển tinh tế */
   const GEO_REGIONS = [
-    { name: 'VIỆT NAM',         lat: 16.2, lon: 107.8, type: 'country', minZoom: 4 },
-    { name: 'BIỂN ĐÔNG',        lat: 14.2, lon: 114.2, type: 'sea',     minZoom: 4 },
-    { name: 'VỊNH BẮC BỘ',      lat: 19.6, lon: 107.6, type: 'sea',     minZoom: 5 },
-    { name: 'VỊNH THÁI LAN',    lat: 9.8,  lon: 102.2, type: 'sea',     minZoom: 5 },
-    { name: 'LÀO',              lat: 19.2, lon: 103.2, type: 'country', minZoom: 4 },
-    { name: 'CAMPUCHIA',        lat: 12.7, lon: 104.9, type: 'country', minZoom: 4 },
-    { name: 'THÁI LAN',         lat: 15.6, lon: 101.0, type: 'country', minZoom: 4 },
-    { name: 'MYANMAR',          lat: 20.5, lon: 96.5,  type: 'country', minZoom: 4 },
-    { name: 'PHILIPPINES',      lat: 12.8, lon: 122.2, type: 'country', minZoom: 4 },
-    { name: 'ĐẢO HẢI NAM',      lat: 19.1, lon: 109.7, type: 'island',  minZoom: 5 },
-    { name: 'ĐÀI LOAN',         lat: 23.7, lon: 121.0, type: 'island',  minZoom: 4 },
-    { name: 'TRUNG QUỐC',       lat: 26.5, lon: 109.5, type: 'country', minZoom: 4 }
+    { name: 'VIỆT NAM',      lat: 16.3, lon: 107.6, type: 'country', minZoom: 4 },
+    { name: 'BIỂN ĐÔNG',     lat: 14.0, lon: 113.8, type: 'sea',     minZoom: 4 },
+    { name: 'VỊNH BẮC BỘ',   lat: 19.7, lon: 107.5, type: 'sea',     minZoom: 5 },
+    { name: 'VỊNH THÁI LAN', lat: 9.6,  lon: 102.0, type: 'sea',     minZoom: 5 },
+    { name: 'LÀO',           lat: 19.2, lon: 103.3, type: 'country', minZoom: 4 },
+    { name: 'CAMPUCHIA',     lat: 12.7, lon: 104.9, type: 'country', minZoom: 4 },
+    { name: 'THÁI LAN',      lat: 15.6, lon: 101.0, type: 'country', minZoom: 4 },
+    { name: 'ĐẢO HẢI NAM',   lat: 19.1, lon: 109.7, type: 'island',  minZoom: 5 },
+    { name: 'PHILIPPINES',   lat: 12.8, lon: 122.2, type: 'country', minZoom: 4 },
+    { name: 'ĐÀI LOAN',      lat: 23.7, lon: 121.0, type: 'island',  minZoom: 4 }
   ];
 
   /* ══════════════════════════════════════════════════════════════
-     AUTHENTIC WINDY.COM COLOR PALETTES (DỊU MẮT, DỄ ĐỌC BẢN ĐỒ)
+     BALANCED TRANSLUCENT WINDY.COM COLOR PALETTES (SÁNG RÕ, DỊU MẮT)
   ══════════════════════════════════════════════════════════════ */
   const COLOR_PALETTES = {
     temp: [
-      [0,   72,  82,  168, 168], // <= 0°C  (Tím lam lạnh)
-      [18,  58,  108, 188, 165], // ~7°C    (Xanh chàm dịu)
-      [34,  52,  148, 182, 162], // ~14°C   (Xanh lam ngọc)
-      [48,  62,  172, 132, 160], // ~19°C   (Xanh lục lam mát)
-      [62,  98,  182, 78,  162], // ~25°C   (Xanh lá dịu như Windy)
-      [74,  188, 172, 62,  168], // ~29°C   (Vàng lục ấm)
-      [86,  218, 122, 48,  175], // ~34°C   (Cam hổ phách)
-      [100, 192, 48,  52,  185]  // >= 40°C (Đỏ đất)
+      [0,   68,  78,  175, 138], // <= 0°C  (Tím lam)
+      [18,  52,  112, 198, 136], // ~7°C    (Xanh chàm)
+      [34,  45,  156, 192, 135], // ~14°C   (Xanh ngọc)
+      [48,  58,  182, 138, 136], // ~19°C   (Xanh lục lam mát)
+      [62,  96,  188, 76,  138], // ~25°C   (Xanh lá dịu)
+      [74,  202, 182, 56,  144], // ~29°C   (Vàng lục ấm)
+      [86,  232, 128, 42,  152], // ~34°C   (Cam hổ phách)
+      [100, 205, 42,  52,  164]  // >= 40°C (Đỏ thẫm)
     ],
     wind: [
-      [0,   68,  112, 168, 125], // Gió nhẹ (Xanh lam dịu)
-      [16,  58,  156, 168, 145], // ~10 km/h (Xanh ngọc)
-      [32,  78,  182, 105, 162], // ~20 km/h (Xanh lục)
-      [50,  185, 182, 58,  172], // ~32 km/h (Vàng dịu)
-      [68,  222, 118, 48,  185], // ~45 km/h (Cam)
-      [85,  208, 52,  78,  198], // ~58 km/h (Đỏ hồng)
-      [100, 168, 42,  178, 212]  // Bão > 70 km/h (Tím tâm bão)
+      [0,   58,  115, 178, 108], // Gió nhẹ
+      [16,  48,  162, 178, 128], // ~10 km/h
+      [32,  75,  188, 108, 142], // ~20 km/h
+      [50,  198, 190, 52,  154], // ~32 km/h
+      [68,  235, 118, 42,  168], // ~45 km/h
+      [85,  218, 48,  78,  182], // ~58 km/h
+      [100, 175, 38,  188, 198]  // Bão > 70 km/h
     ],
     rain: [
-      [0,   72,  115, 148, 45],  // Không mưa (Nền xanh xám thật nhẹ)
-      [5,   58,  148, 212, 125], // Mưa nhỏ 0.5mm
-      [20,  48,  182, 195, 162], // 2mm
-      [42,  68,  195, 95,  178], // 5mm
-      [68,  218, 188, 48,  192], // 8mm
-      [86,  225, 92,  42,  205], // 11mm
-      [100, 188, 42,  195, 218]  // Mưa rất to > 14mm
+      [0,   0,   0,   0,   0],   // Không mưa: Trong suốt 100% để thấy rõ địa hình!
+      [4,   56,  152, 225, 115], // Mưa nhỏ 0.5mm
+      [18,  42,  188, 205, 148], // 2mm
+      [40,  62,  202, 96,  166], // 5mm
+      [66,  228, 195, 45,  182], // 8mm
+      [85,  235, 92,  38,  196], // 11mm
+      [100, 195, 38,  205, 210]  // Mưa rất to > 14mm
     ],
     cloud: [
-      [0,   62,  108, 162, 75],  // Quang mây
-      [30,  105, 138, 168, 108],
-      [60,  148, 168, 186, 145],
-      [85,  188, 198, 210, 175],
-      [100, 222, 228, 236, 198]  // Mây dày đặc
+      [0,   0,   0,   0,   0],
+      [25,  125, 152, 182, 72],
+      [55,  162, 182, 204, 122],
+      [80,  198, 212, 226, 158],
+      [100, 235, 242, 250, 188]
     ],
     pressure: [
-      [0,   192, 52,  92,  172], // Áp thấp < 998 hPa
-      [28,  215, 128, 58,  160],
-      [50,  68,  158, 188, 148], // Chuẩn 1012 hPa
-      [75,  78,  182, 118, 158],
-      [100, 98,  92,  205, 175]  // Áp cao > 1026 hPa
+      [0,   202, 48,  92,  152],
+      [28,  225, 132, 52,  144],
+      [50,  62,  162, 196, 136],
+      [75,  72,  188, 122, 144],
+      [100, 108, 88,  215, 158]
     ],
     humidity: [
-      [0,   208, 132, 52,  155],
-      [35,  198, 185, 68,  155],
-      [62,  75,  178, 132, 162],
-      [82,  52,  138, 198, 172],
-      [100, 72,  82,  188, 185]
+      [0,   218, 135, 48,  138],
+      [35,  208, 192, 62,  138],
+      [62,  72,  186, 136, 146],
+      [82,  48,  142, 208, 156],
+      [100, 72,  78,  198, 168]
     ]
   };
 
@@ -193,9 +213,9 @@
      STATE MANAGEMENT
   ══════════════════════════════════════════════════════════════ */
   let mapInstance    = null;
-  let colorCanvas    = null; // #meteoCanvas (below borders, multiply blend over terrain)
+  let colorCanvas    = null;
   let colorCtx       = null;
-  let topCanvas      = null; // #meteoTopCanvas (above borders: crisp particles, labels, probe)
+  let topCanvas      = null;
   let topCtx         = null;
   let animFrameId    = null;
 
@@ -204,33 +224,34 @@
   let trailCanvas           = null;
   let trailCtx              = null;
 
-  let currentLayer   = 'temp'; // Mở mặc định lớp Nhiệt độ + Hạt gió giống ảnh Windy.com!
-  let currentBasemap = 'terrain'; // 'terrain' (Esri Relief không watermark) | 'street' | 'satellite'
+  let currentLayer   = 'temp';
+  let currentBasemap = 'terrain'; // 'terrain' | 'street' | 'satellite'
   let tileLayers     = {};
-  let bordersGeoLayer = null;
-  let overlayOpacity = 1.0;
+  let borderHaloLayer = null;
+  let borderCoreLayer = null;
+
   let showParticles  = true;
   let showIsobars    = false;
+  let showCityLabels = true;
 
-  let centerLat = 16.2, centerLon = 107.5;
+  // Mặc định mở bản đồ đóng khung TOÀN VIỆT NAM & BIỂN ĐÔNG ở chính giữa màn hình (Zoom 6) để dễ quan sát nhất!
+  let centerLat = 16.10, centerLon = 107.20;
   let gridLatMin = -2, gridLatMax = 34, gridLonMin = 86, gridLonMax = 128;
   let lastFetchedBounds = null;
   let fetchDebounceTimer = null;
 
   let rawGridNodes     = [];
-  let meteoGrid        = []; // Blended 13x13 grid
+  let meteoGrid        = [];
   let rawCityNodes     = [];
   let cityWeatherCache = [];
   let activeCityBadges = [];
 
-  // Sparse, delicate Windy-style particle arrays
-  let numParticles = 750;
+  let numParticles = 700;
   let pX, pY, pAge, pLife;
 
   let windGridCols = 0, windGridRows = 0, windGridStep = 12;
   let screenGridU = null, screenGridV = null, screenGridSpd = null;
 
-  // Timeline (Real 72-Hour Forecast)
   let isTimelinePlaying  = false;
   let timelineHourOffset = 0;
   let timelinePos        = 0;
@@ -241,7 +262,7 @@
   let pinnedProbe   = null;
   let spotAbortCtrl = null;
 
-  buildAllColorLUTs(overlayOpacity);
+  buildAllColorLUTs(1.0);
 
   /* ══════════════════════════════════════════════════════════════
      OPEN / CLOSE
@@ -252,16 +273,14 @@
     modal.classList.add('show');
     document.body.style.overflow = 'hidden';
 
-    if (window.currentWeatherData?.latitude && window.currentWeatherData?.longitude) {
-      centerLat = window.currentWeatherData.latitude;
-      centerLon = window.currentWeatherData.longitude;
-    }
-
     if (!mapInstance) {
+      // Khởi tạo góc nhìn mặc định bao trọn Toàn Việt Nam & Biển Đông ở chính giữa
+      centerLat = 16.10;
+      centerLon = 107.20;
       requestAnimationFrame(() => {
         initLeafletMap();
         injectWindyControls();
-        loadCrispVectorBorders();
+        loadDualStrokeVectorBorders();
         setTimeout(() => {
           if (mapInstance) {
             mapInstance.invalidateSize();
@@ -271,14 +290,11 @@
         }, 60);
       });
     } else {
-      mapInstance.setView([centerLat, centerLon], Math.max(5, mapInstance.getZoom()));
       setTimeout(() => {
         if (!mapInstance) return;
         mapInstance.invalidateSize();
         resizeCanvases();
         const needRefetch = !lastFetchedBounds ||
-          centerLat < gridLatMin + 4 || centerLat > gridLatMax - 4 ||
-          centerLon < gridLonMin + 4 || centerLon > gridLonMax - 4 ||
           (Date.now() - lastFetchedBounds.ts > 10 * 60 * 1000);
         if (needRefetch) {
           fetchMeteorologicalData(true);
@@ -304,7 +320,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     WATERMARK-FREE TERRAIN BASEMAP + LAYERED PANES + VECTOR BORDERS
+     HIGH-CLARITY TERRAIN BASEMAP + DUAL-STROKE VECTOR BORDERS
   ══════════════════════════════════════════════════════════════ */
   function initLeafletMap() {
     const mapEl = document.getElementById('meteoLeafletMap');
@@ -312,24 +328,23 @@
 
     mapInstance = L.map(mapEl, {
       center: [centerLat, centerLon],
-      zoom: 5,
+      zoom: 6,
       minZoom: 3,
       maxZoom: 12,
-      zoomControl: false, // Dùng bộ nút góc dưới phải gọn nhẹ chuẩn Windy
+      zoomControl: false,
       attributionControl: false,
       worldCopyJump: true,
       preferCanvas: true
     });
 
-    // Tạo thứ tự lớp (Panes) chuẩn xác như Windy.com:
-    // 1. tilePane (z=200): Nền địa hình xám sáng Esri Shaded Relief (KHÔNG BAO GIỜ CÓ WATERMARK API KEY!)
-    // 2. windyColorPane (z=380): Lớp màu thời tiết (multiply/translucent để nhìn xuyên thấy núi đồi & biển)
-    // 3. windyBordersPane (z=420): Đường bờ biển, hải đảo & biên giới quốc gia sắc nét nằm TRÊN lớp màu!
-    // 4. windyTopPane (z=450): Hạt gió mảnh dịu + Nhãn thành phố viền chữ nét căng + Điểm đo
+    // Thứ tự 4 lớp hiển thị trong suốt, không làm tối bản đồ:
+    // 1. tilePane (z=200): Bản đồ Địa hình Sáng Esri Topo / Physical Relief (100% không watermark!)
+    // 2. windyColorPane (z=380): Lớp màu thời tiết bán trong suốt (alpha ~0.55) giúp thấy rõ cả màu nhiệt lẫn địa hình bên dưới
+    // 3. windyBordersPane (z=420): Đường bờ biển & biên giới 2 lớp (Dual-Stroke: viền sáng + lõi đậm) nổi bật trên mọi màu nền!
+    // 4. windyTopPane (z=450): Hạt gió mảnh + Nhãn tỉnh thành kèm viên thuốc nhiệt độ + Cờ đo thời tiết
     mapInstance.createPane('windyColorPane');
     mapInstance.getPane('windyColorPane').style.zIndex = 380;
     mapInstance.getPane('windyColorPane').style.pointerEvents = 'none';
-    mapInstance.getPane('windyColorPane').style.mixBlendMode = 'multiply';
 
     mapInstance.createPane('windyBordersPane');
     mapInstance.getPane('windyBordersPane').style.zIndex = 420;
@@ -339,40 +354,33 @@
     mapInstance.getPane('windyTopPane').style.zIndex = 450;
     mapInstance.getPane('windyTopPane').style.pointerEvents = 'none';
 
-    // Nền Địa hình chuẩn Windy (100% Free Esri Light Gray + Shaded Relief - Rõ đất liền/biển & dãy núi, 0% chữ rác)
-    tileLayers.grayBase = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 16 }
-    );
-    tileLayers.shadedRelief = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 13, opacity: 0.62 }
+    // 1. Nền Địa hình Sáng rõ Esri World Topo Map (Thấy rõ núi đồi, sông ngòi, biển đảo & ranh giới tỉnh)
+    tileLayers.terrain = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 18 }
     );
 
-    // Nền Đường sá chi tiết (Esri Street)
+    // 2. Nền Đường sá & Hành chính (Esri Street Map)
     tileLayers.street = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
       { maxZoom: 18 }
     );
 
-    // Nền Vệ tinh (Esri World Imagery)
+    // 3. Nền Vệ tinh (Esri World Imagery)
     tileLayers.satellite = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       { maxZoom: 18 }
     );
 
-    // Lớp ranh giới hành chính chi tiết của Esri
+    // 4. Lớp ranh giới & tên địa danh quốc tế sắc nét nằm TRÊN lớp màu
     tileLayers.refBoundaries = L.tileLayer(
       'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 18, pane: 'windyBordersPane', opacity: 0.45 }
+      { maxZoom: 18, pane: 'windyBordersPane', opacity: 0.72 }
     );
 
-    // Kích hoạt mặc định nền Địa hình Windy + Ranh giới sắc nét
-    tileLayers.grayBase.addTo(mapInstance);
-    tileLayers.shadedRelief.addTo(mapInstance);
+    tileLayers.terrain.addTo(mapInstance);
     tileLayers.refBoundaries.addTo(mapInstance);
 
-    // Gắn 2 lớp Canvas vào đúng Pane của Leaflet
     colorCanvas = document.getElementById('meteoCanvas');
     topCanvas   = document.getElementById('meteoTopCanvas');
     colorCtx    = colorCanvas.getContext('2d');
@@ -399,7 +407,6 @@
 
     mapInstance.on('moveend zoomend resize', () => {
       isMapMoving = false;
-      updateReferenceLabelsByZoom();
       resizeCanvases();
       rebuildScreenCaches();
 
@@ -425,21 +432,9 @@
     mapEl.addEventListener('click', handleMapClick);
   }
 
-  function updateReferenceLabelsByZoom() {
-    if (!mapInstance || !tileLayers.refBoundaries) return;
-    const z = mapInstance.getZoom();
-    if (z >= 6 || currentBasemap === 'satellite') {
-      if (!mapInstance.hasLayer(tileLayers.refBoundaries)) {
-        tileLayers.refBoundaries.addTo(mapInstance);
-      }
-    } else if (mapInstance.hasLayer(tileLayers.refBoundaries)) {
-      mapInstance.removeLayer(tileLayers.refBoundaries);
-    }
-  }
-
-  // Nạp đường bờ biển, hải đảo & biên giới quốc gia Vector sắc nét (Natural Earth 50m) nằm TRÊN lớp màu!
-  async function loadCrispVectorBorders() {
-    if (!mapInstance || bordersGeoLayer) return;
+  // Đường bờ biển & biên giới 2 lớp (Dual-Stroke: Halo trắng mảnh + Lõi than đậm) giúp nổi bật 100% trên mọi nền màu!
+  async function loadDualStrokeVectorBorders() {
+    if (!mapInstance || borderCoreLayer) return;
     const urls = [
       'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson',
       'https://cdn.jsdelivr.net/gh/johan/world.geo.json@master/countries.geo.json'
@@ -450,13 +445,26 @@
         const res = await fetch(url);
         if (!res.ok) continue;
         const geojson = await res.json();
-        bordersGeoLayer = L.geoJSON(geojson, {
+
+        // Lớp 1: Viền sáng bảo vệ (Halo)
+        borderHaloLayer = L.geoJSON(geojson, {
           pane: 'windyBordersPane',
           interactive: false,
           style: {
-            color: '#1e293b',
-            weight: 1.2,
-            opacity: 0.78,
+            color: 'rgba(255, 255, 255, 0.55)',
+            weight: 2.6,
+            fill: false
+          }
+        }).addTo(mapInstance);
+
+        // Lớp 2: Đường bờ biển & biên giới lõi đậm sắc nét
+        borderCoreLayer = L.geoJSON(geojson, {
+          pane: 'windyBordersPane',
+          interactive: false,
+          style: {
+            color: '#0f172a',
+            weight: 1.25,
+            opacity: 0.88,
             fill: false
           }
         }).addTo(mapInstance);
@@ -524,53 +532,50 @@
     if (!mapInstance) return;
     currentBasemap = type;
 
-    ['grayBase', 'shadedRelief', 'street', 'satellite'].forEach(k => {
+    ['terrain', 'street', 'satellite'].forEach(k => {
       if (tileLayers[k] && mapInstance.hasLayer(tileLayers[k])) {
         mapInstance.removeLayer(tileLayers[k]);
       }
     });
 
-    const colorPane = mapInstance.getPane('windyColorPane');
     if (type === 'satellite') {
       tileLayers.satellite.addTo(mapInstance);
-      if (colorPane) colorPane.style.mixBlendMode = 'normal';
-      buildAllColorLUTs(0.76);
-      if (bordersGeoLayer) bordersGeoLayer.setStyle({ color: 'rgba(255,255,255,0.7)', weight: 1.2 });
+      buildAllColorLUTs(0.82);
     } else if (type === 'street') {
       tileLayers.street.addTo(mapInstance);
-      if (colorPane) colorPane.style.mixBlendMode = 'multiply';
-      buildAllColorLUTs(0.88);
-      if (bordersGeoLayer) bordersGeoLayer.setStyle({ color: '#1e293b', weight: 1.1 });
+      buildAllColorLUTs(0.92);
     } else {
-      tileLayers.grayBase.addTo(mapInstance);
-      tileLayers.shadedRelief.addTo(mapInstance);
-      if (colorPane) colorPane.style.mixBlendMode = 'multiply';
+      tileLayers.terrain.addTo(mapInstance);
       buildAllColorLUTs(1.0);
-      if (bordersGeoLayer) bordersGeoLayer.setStyle({ color: '#1e293b', weight: 1.25 });
     }
 
-    updateReferenceLabelsByZoom();
     buildOffscreenColorRaster();
     renderColorCanvasOnce();
   }
 
   /* ══════════════════════════════════════════════════════════════
-     AUTHENTIC WINDY.COM FLOATING UI CONTROLS
+     AUTHENTIC WINDY.COM FLOATING UI & QUICK VIETNAM REGION BAR
   ══════════════════════════════════════════════════════════════ */
   function injectWindyControls() {
     const wrap = document.querySelector('.meteo-map-wrap');
     if (!wrap) return;
 
-    // 1. Top-Left Floating Search Pill (Giống hệt thanh Search trắng góc trên trái của Windy.com!)
+    // 1. Top-Left: Thanh Tìm kiếm trắng + Dải nút Chuyển vùng nhanh Việt Nam
     if (!wrap.querySelector('.windy-top-left')) {
       const tlBox = document.createElement('div');
       tlBox.className = 'windy-top-left';
+
+      const regionBtns = QUICK_REGIONS.map((r, i) =>
+        `<button type="button" class="wqr-btn${i === 0 ? ' active' : ''}" data-region="${r.id}">${r.label}</button>`
+      ).join('');
+
       tlBox.innerHTML = `
         <div class="windy-search-pill">
           <span class="wsp-icon">🔍</span>
-          <input type="search" id="meteoSearchInput" placeholder="Tìm tỉnh thành, đảo, quốc gia..." autocomplete="off" />
+          <input type="search" id="meteoSearchInput" placeholder="Tìm tỉnh thành, đảo, tọa độ..." autocomplete="off" />
           <button type="button" id="meteoLocateBtn" class="wsp-gps" title="Định vị GPS của tôi">◎</button>
         </div>
+        <div class="windy-quick-regions" id="windyQuickRegions">${regionBtns}</div>
       `;
       wrap.appendChild(tlBox);
 
@@ -597,26 +602,27 @@
           flyToAndInspect(pos.coords.latitude, pos.coords.longitude, 'Vị trí GPS của bạn');
         });
       });
+
+      tlBox.querySelectorAll('.wqr-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          tlBox.querySelectorAll('.wqr-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const reg = QUICK_REGIONS.find(r => r.id === btn.dataset.region);
+          if (reg && mapInstance) {
+            mapInstance.flyTo([reg.lat, reg.lon], reg.zoom, { duration: 0.75 });
+          }
+        });
+      });
     }
 
-    // 2. Top-Center Windy Brand Badge & Top-Right Basemap + Zoom + Close
-    if (!wrap.querySelector('.windy-top-center')) {
-      const tc = document.createElement('div');
-      tc.className = 'windy-top-center';
-      tc.innerHTML = `
-        <span class="wtc-badge">🌬️</span>
-        <span class="wtc-name">Khí tượng Trực tiếp</span>
-      `;
-      wrap.appendChild(tc);
-    }
-
+    // 2. Top-Right: Đổi bản đồ nền + Phóng to/Thu nhỏ + Đóng
     if (!wrap.querySelector('.windy-top-right')) {
       const tr = document.createElement('div');
       tr.className = 'windy-top-right';
       tr.innerHTML = `
         <div class="meteo-basemap-toggle" id="meteoBasemapToggle">
-          <button class="bm-btn active" data-map="terrain" title="Nền Địa hình Sáng chuẩn Windy.com (Rõ núi đồi & đường bờ biển)">🗺️ Địa hình</button>
-          <button class="bm-btn" data-map="street" title="Bản đồ Hành chính & Đường sá">🛣️ Đường sá</button>
+          <button class="bm-btn active" data-map="terrain" title="Nền Địa hình Sáng chuẩn Windy">🗺️ Địa hình</button>
+          <button class="bm-btn" data-map="street" title="Bản đồ Đường sá & Hành chính">🛣️ Đường sá</button>
           <button class="bm-btn" data-map="satellite" title="Ảnh Vệ tinh">🛰️ Vệ tinh</button>
         </div>
         <button class="windy-zoom-btn" id="windyZoomIn" title="Phóng to">+</button>
@@ -638,11 +644,15 @@
       tr.querySelector('#meteoCloseBtnFloating')?.addEventListener('click', closeMeteoMap);
     }
 
-    // 3. Right-Side Layer Menu (Chữ nổi bên trái + Nút tròn màu bên phải giống hệt Windy.com!)
+    // 3. Right-Side Layer Menu (Chữ nổi bên trái + Nút tròn màu bên phải giống Windy.com)
     if (!wrap.querySelector('.windy-layer-panel')) {
       const rp = document.createElement('div');
       rp.className = 'windy-layer-panel';
       rp.innerHTML = `
+        <div class="wlp-item active" data-layer="temp">
+          <span class="wlp-label">Nhiệt độ</span>
+          <span class="wlp-circle wlp-c-temp">🌡️</span>
+        </div>
         <div class="wlp-item" data-layer="wind">
           <span class="wlp-label">Gió</span>
           <span class="wlp-circle wlp-c-wind">💨</span>
@@ -650,10 +660,6 @@
         <div class="wlp-item" data-layer="rain">
           <span class="wlp-label">Mưa, dông</span>
           <span class="wlp-circle wlp-c-rain">🌧️</span>
-        </div>
-        <div class="wlp-item active" data-layer="temp">
-          <span class="wlp-label">Nhiệt độ</span>
-          <span class="wlp-circle wlp-c-temp">🌡️</span>
         </div>
         <div class="wlp-item" data-layer="cloud">
           <span class="wlp-label">Mây</span>
@@ -679,7 +685,12 @@
       });
     }
 
-    // Toggles for Particles & Isobars in bottom-right dock
+    // Bottom-Right Toggles
+    document.getElementById('wlpToggleCities')?.addEventListener('click', e => {
+      showCityLabels = !showCityLabels;
+      e.currentTarget.classList.toggle('active', showCityLabels);
+    });
+
     document.getElementById('wlpToggleParticles')?.addEventListener('click', e => {
       showParticles = !showParticles;
       e.currentTarget.classList.toggle('active', showParticles);
@@ -691,7 +702,7 @@
       e.currentTarget.classList.toggle('active', showIsobars);
     });
 
-    // 4. Spot Forecast Card (Khi chạm vào điểm bất kỳ trên bản đồ)
+    // 4. Spot Forecast Card
     if (!wrap.querySelector('#meteoSpotCard')) {
       const spot = document.createElement('div');
       spot.id = 'meteoSpotCard';
@@ -699,7 +710,7 @@
       wrap.appendChild(spot);
     }
 
-    // 5. Bottom-Left Windy Play + Multi-Day Timeline Strip (Giống hệt thanh dưới của Windy.com!)
+    // 5. Bottom-Left Windy Play + Multi-Day Timeline Strip
     if (!wrap.querySelector('.windy-timeline')) {
       const tl = document.createElement('div');
       tl.className = 'windy-timeline';
@@ -751,10 +762,10 @@
     if (!mapInstance) return;
     centerLat = lat;
     centerLon = lon;
-    mapInstance.flyTo([lat, lon], 7, { duration: 0.85 });
+    mapInstance.flyTo([lat, lon], 7, { duration: 0.8 });
     setTimeout(() => {
       pinLocationAndFetchRealSpot(lat, lon, label);
-    }, 900);
+    }, 850);
   }
 
   function switchLayer(layerName) {
@@ -831,12 +842,11 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     HIGH-RES 13x13 (169 POINTS) + 46 REAL STATIONS BATCH FETCH
+     HIGH-RES 13x13 (169 POINTS) + 56 REAL STATIONS BATCH FETCH
   ══════════════════════════════════════════════════════════════ */
   async function fetchMeteorologicalData(showSpinner = true) {
     if (showSpinner) showLoadingSpinner(true);
 
-    // Vùng phủ rộng khắp Đông Nam Á, Nam Trung Quốc & Biển Đông với lưới dày 13x13 = 169 điểm thực!
     const latSpan = 34;
     const lonSpan = 42;
     gridLatMin = Math.max(-70, centerLat - latSpan / 2);
@@ -853,7 +863,6 @@
       }
     }
 
-    // Chia 169 điểm lưới thành 3 batch nhỏ (~56 điểm/batch) + 1 batch cho 46 thành phố = 4 request song song cực nhanh!
     const c1 = samplePoints.slice(0, 57);
     const c2 = samplePoints.slice(57, 114);
     const c3 = samplePoints.slice(114);
@@ -1002,7 +1011,6 @@
     }
 
     if (rawGridNodes.length === GRID_ROWS * GRID_COLS) {
-      // Hòa trộn nhẹ giá trị thực của 46 trạm thành phố vào lưới 169 điểm để tăng chi tiết vi khí hậu (ví dụ Đà Lạt, Lào Cai mát hơn đồng bằng)
       meteoGrid = rawGridNodes.map(n => {
         const base = extractNodeSliceAtOffset(n, hourOffsetFloat);
         if (!cityWeatherCache.length) return base;
@@ -1012,8 +1020,8 @@
         for (let i = 0; i < cityWeatherCache.length; i++) {
           const st = cityWeatherCache[i];
           const d2 = (st.lat - base.lat) * (st.lat - base.lat) + (st.lon - base.lon) * (st.lon - base.lon);
-          if (d2 < 3.2) {
-            const w = Math.exp(-d2 / 0.9) * 0.65;
+          if (d2 < 3.0) {
+            const w = Math.exp(-d2 / 0.85) * 0.7;
             wSum += w;
             tSum += st.tempExact * w;
             rSum += st.rain * w;
@@ -1133,7 +1141,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     SMOOTH COLOR HEATMAP RASTER (RENDERED ONLY WHEN NEEDED!)
+     SMOOTH COLOR HEATMAP RASTER
   ══════════════════════════════════════════════════════════════ */
   function buildOffscreenColorRaster() {
     if (!offscreenRasterCanvas || !offscreenRasterCtx || !mapInstance || meteoGrid.length !== GRID_ROWS * GRID_COLS) return;
@@ -1226,14 +1234,13 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     DELICATE, AIRY WINDY.COM STREAMLINES (SUBTLE & CRYSTAL CLEAR!)
+     DELICATE, AIRY WINDY.COM STREAMLINES
   ══════════════════════════════════════════════════════════════ */
   function initParticles() {
     const W = (topCanvas && topCanvas.width) || 1280;
     const H = (topCanvas && topCanvas.height) || 720;
 
-    // Mật độ hạt gió thưa thoáng giống hệt ảnh Windy.com (~1 hạt mỗi 1,900px²) để KHÔNG làm rối mắt!
-    numParticles = Math.max(420, Math.min(920, Math.round((W * H) / 1900)));
+    numParticles = Math.max(380, Math.min(820, Math.round((W * H) / 2100)));
 
     pX    = new Float32Array(numParticles);
     pY    = new Float32Array(numParticles);
@@ -1248,8 +1255,8 @@
   function resetParticle(i, W, H, initial = false) {
     pX[i]    = Math.random() * W;
     pY[i]    = Math.random() * H;
-    pAge[i]  = initial ? Math.random() * 65 : 0;
-    pLife[i] = 45 + Math.random() * 45;
+    pAge[i]  = initial ? Math.random() * 60 : 0;
+    pLife[i] = 42 + Math.random() * 42;
   }
 
   function startRenderEngine() {
@@ -1269,18 +1276,17 @@
 
     topCtx.clearRect(0, 0, W, H);
 
-    // 1. Vẽ hạt gió mảnh, ngắn, bán trong suốt kiểu Windy.com
+    // 1. Hạt gió thanh mảnh, thưa thoáng kiểu Windy.com
     if (showParticles && trailCtx && trailCanvas && !isMapMoving) {
       trailCtx.save();
       trailCtx.globalCompositeOperation = 'destination-in';
-      // 0.84 tạo vệt sao băng ngắn gọn ~16px thanh thoát như Windy.com, không bị kéo sợi trắng dài rối mắt!
-      trailCtx.fillStyle = 'rgba(0, 0, 0, 0.84)';
+      trailCtx.fillStyle = 'rgba(0, 0, 0, 0.83)';
       trailCtx.fillRect(0, 0, W, H);
       trailCtx.restore();
 
-      const zoom = mapInstance ? mapInstance.getZoom() : 5;
-      const zoomScale = Math.max(0.5, Math.min(1.4, Math.pow(1.1, zoom - 5)));
-      const moveStep = 0.24 * zoomScale * delta;
+      const zoom = mapInstance ? mapInstance.getZoom() : 6;
+      const zoomScale = Math.max(0.5, Math.min(1.35, Math.pow(1.08, zoom - 5)));
+      const moveStep = 0.23 * zoomScale * delta;
 
       const pathLight  = new Path2D();
       const pathStrong = new Path2D();
@@ -1300,7 +1306,7 @@
         const midY = curY + w1.v * moveStep * 0.5;
         const w2 = getWindAtPixel(midX, midY);
 
-        const spd = Math.max(3.0, w2.spd);
+        const spd = Math.max(2.8, w2.spd);
         const scale = spd / Math.max(0.1, w2.spd);
         const nextX = curX + w2.u * scale * moveStep;
         const nextY = curY + w2.v * scale * moveStep;
@@ -1325,44 +1331,41 @@
       trailCtx.lineCap = 'round';
 
       trailCtx.lineWidth = 1.05;
-      trailCtx.strokeStyle = 'rgba(255, 255, 255, 0.44)';
+      trailCtx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
       trailCtx.stroke(pathLight);
 
       trailCtx.lineWidth = 1.35;
-      trailCtx.strokeStyle = 'rgba(255, 255, 255, 0.62)';
+      trailCtx.strokeStyle = 'rgba(255, 255, 255, 0.64)';
       trailCtx.stroke(pathStrong);
 
       topCtx.drawImage(trailCanvas, 0, 0);
     }
 
-    // 2. Đường đẳng áp thực (khi bật nút Khí áp hoặc ở lớp Áp suất)
+    // 2. Đường đẳng áp thực
     if ((showIsobars || currentLayer === 'pressure') && !isMapMoving) {
       drawRealMarchingSquaresIsobars(W, H);
     }
 
-    // 3. Nhãn tên Quốc gia & Vùng biển tinh tế kiểu Windy.com
+    // 3. Nhãn tên Quốc gia & Vùng biển
     if (!isMapMoving) {
       drawGeographicWatermarks(W, H);
     }
 
-    // 4. Nhãn Thành phố & Chấm trạm màu chuẩn Windy.com (KHÔNG HỘP ĐEN!)
-    if (!isMapMoving) {
+    // 4. Nhãn Tỉnh thành & Viên thuốc nhiệt độ tương phản cao
+    if (showCityLabels && !isMapMoving) {
       drawWindyStyleCityLabels(W, H);
     }
 
-    // 5. Vòng tâm điểm đo
+    // 5. Cờ đo thời tiết tại điểm ghim (Windy Weather Picker Flag)
     drawWeatherProbeMarker();
 
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     SUBTLE COUNTRY & SEA LABELS (GIỐNG "VIETNAM", "SOUTH CHINA SEA" TRÊN WINDY)
-  ══════════════════════════════════════════════════════════════ */
   function drawGeographicWatermarks(W, H) {
     if (!mapInstance || !topCtx) return;
     const zoom = mapInstance.getZoom();
-    if (zoom > 7) return; // Khi phóng to đã có nhãn chi tiết của Esri
+    if (zoom > 7) return;
 
     topCtx.save();
     topCtx.textAlign = 'center';
@@ -1371,21 +1374,16 @@
     GEO_REGIONS.forEach(reg => {
       if (zoom < reg.minZoom) return;
       const pt = mapInstance.latLngToContainerPoint([reg.lat, reg.lon]);
-      if (pt.x < 60 || pt.x > W - 80 || pt.y < 50 || pt.y > H - 70) return;
+      if (pt.x < 60 || pt.x > W - 80 || pt.y < 55 || pt.y > H - 70) return;
 
-      if (reg.type === 'sea') {
-        topCtx.font = 'italic 600 10.5px "Be Vietnam Pro", sans-serif';
-        topCtx.fillStyle = 'rgba(255, 255, 255, 0.58)';
-        topCtx.strokeStyle = 'rgba(15, 23, 42, 0.45)';
-        topCtx.lineWidth = 2.2;
-      } else {
-        topCtx.font = '700 10px "Be Vietnam Pro", sans-serif';
-        topCtx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-        topCtx.strokeStyle = 'rgba(15, 23, 42, 0.48)';
-        topCtx.lineWidth = 2.4;
-      }
+      topCtx.font = reg.type === 'sea'
+        ? 'italic 700 10.5px "Be Vietnam Pro", sans-serif'
+        : '800 10px "Be Vietnam Pro", sans-serif';
       topCtx.lineJoin = 'round';
+      topCtx.lineWidth = 2.6;
+      topCtx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
       topCtx.strokeText(reg.name, pt.x, pt.y);
+      topCtx.fillStyle = reg.type === 'sea' ? 'rgba(224, 242, 254, 0.72)' : 'rgba(255, 255, 255, 0.68)';
       topCtx.fillText(reg.name, pt.x, pt.y);
     });
 
@@ -1393,8 +1391,8 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     AUTHENTIC WINDY.COM TWO-LINE OUTLINED CITY LABELS + COLORED DOTS
-     (Không dùng khung hộp đen che bản đồ — Chữ trắng viền tối sắc nét + Chấm màu!)
+     HIGH-CLARITY CITY LABELS WITH COMPACT VALUE PILL
+     (Tên địa danh chữ trắng viền đậm + Viên thuốc số liệu vàng/cyan tách biệt rõ ràng!)
   ══════════════════════════════════════════════════════════════ */
   function drawWindyStyleCityLabels(W, H) {
     if (!mapInstance || !topCtx || !cityWeatherCache.length) return;
@@ -1403,45 +1401,58 @@
     activeCityBadges = [];
 
     topCtx.save();
-    topCtx.textAlign = 'center';
     topCtx.lineJoin = 'round';
     topCtx.miterLimit = 2;
 
     cityWeatherCache.forEach(city => {
-      if (city.priority === 3 && zoom < 6) return;
+      if (city.priority === 3 && zoom < 7) return;
       if (city.priority === 2 && zoom < 5) return;
 
       const pt = mapInstance.latLngToContainerPoint([city.lat, city.lon]);
-      if (pt.x < 45 || pt.x > W - 95 || pt.y < 48 || pt.y > H - 75) return;
+      if (pt.x < 45 || pt.x > W - 105 || pt.y < 52 || pt.y > H - 75) return;
 
       let valStr = `${city.temp}°`;
-      if (currentLayer === 'wind') valStr = `${city.wind} km/h`;
-      else if (currentLayer === 'rain') valStr = city.rain > 0.05 ? `${city.rain.toFixed(1)}mm` : `${city.temp}°`;
-      else if (currentLayer === 'pressure') valStr = `${city.pressure}`;
-      else if (currentLayer === 'humidity') valStr = `${city.humidity}%`;
-      else if (currentLayer === 'cloud') valStr = `${city.cloud}%`;
+      let valColor = '#fde047'; // Vàng sáng nổi bật cho nhiệt độ
+      if (currentLayer === 'wind') {
+        valStr = `${city.wind}km/h`;
+        valColor = '#38bdf8';
+      } else if (currentLayer === 'rain') {
+        valStr = city.rain > 0.05 ? `${city.rain.toFixed(1)}mm` : `${city.temp}°`;
+        valColor = city.rain > 0.05 ? '#7dd3fc' : '#fde047';
+      } else if (currentLayer === 'pressure') {
+        valStr = `${city.pressure}`;
+        valColor = '#e9d5ff';
+      } else if (currentLayer === 'humidity') {
+        valStr = `${city.humidity}%`;
+        valColor = '#6ee7b7';
+      } else if (currentLayer === 'cloud') {
+        valStr = `${city.cloud}%`;
+        valColor = '#e2e8f0';
+      }
 
-      topCtx.font = '600 11.5px "Be Vietnam Pro", -apple-system, sans-serif';
+      topCtx.font = '700 11.5px "Be Vietnam Pro", -apple-system, sans-serif';
       const nameW = topCtx.measureText(city.n).width;
-      const boxW  = Math.max(nameW, 34) + 10;
-      const boxH  = 32;
-      const boxX  = pt.x - boxW / 2;
-      const boxY  = pt.y - 24;
+      topCtx.font = '800 10.5px "Be Vietnam Pro", -apple-system, sans-serif';
+      const valW  = topCtx.measureText(valStr).width + 10;
 
-      const pad = zoom >= 6 ? 6 : 12;
+      const totalW = Math.max(nameW, valW) + 8;
+      const totalH = 34;
+      const boxX   = pt.x - totalW / 2;
+      const boxY   = pt.y - 28;
+
+      const pad = zoom >= 7 ? 4 : zoom >= 6 ? 7 : 11;
       const collides = occupied.some(b =>
         boxX - pad < b.x + b.w &&
-        boxX + boxW + pad > b.x &&
+        boxX + totalW + pad > b.x &&
         boxY - pad < b.y + b.h &&
-        boxY + boxH + pad > b.y
+        boxY + totalH + pad > b.y
       );
       if (collides) return;
 
-      occupied.push({ x: boxX, y: boxY, w: boxW, h: boxH });
-      activeCityBadges.push({ city, x: boxX - 4, y: boxY - 4, w: boxW + 8, h: boxH + 12 });
+      occupied.push({ x: boxX, y: boxY, w: totalW, h: totalH });
+      activeCityBadges.push({ city, x: boxX - 4, y: boxY - 4, w: totalW + 8, h: totalH + 10 });
 
-      // 1. Chấm tròn màu biểu thị trạng thái thực tế của trạm (giống chấm xanh/lam trên Windy.com!)
-      // Xanh lá (#22c55e): Tốt/Nắng ráo | Xanh dương (#38bdf8): Có mưa/Ẩm cao | Vàng cam (#f59e0b): Gió mạnh/Nóng >33°C
+      // 1. Chấm tròn màu tại đúng tọa độ địa lý
       let dotColor = '#22c55e';
       if (city.rain >= 0.3 || [51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99].includes(city.code)) {
         dotColor = '#38bdf8';
@@ -1452,38 +1463,54 @@
       }
 
       topCtx.beginPath();
-      topCtx.arc(pt.x, pt.y + 4, 3.3, 0, Math.PI * 2);
+      topCtx.arc(pt.x, pt.y + 3, 3.2, 0, Math.PI * 2);
       topCtx.fillStyle = dotColor;
       topCtx.fill();
-      topCtx.lineWidth = 1.2;
-      topCtx.strokeStyle = 'rgba(10, 15, 28, 0.85)';
+      topCtx.lineWidth = 1.3;
+      topCtx.strokeStyle = '#0f172a';
       topCtx.stroke();
 
-      // 2. Dòng 1: Tên địa danh (Chữ trắng tinh + viền halo đen mảnh — KHÔNG hộp đen!)
+      // 2. Tên thành phố (Chữ trắng viền đen sắc nét phía trên)
       topCtx.font = city.priority === 1
         ? '700 11.5px "Be Vietnam Pro", -apple-system, sans-serif'
         : '600 11px "Be Vietnam Pro", -apple-system, sans-serif';
+      topCtx.textAlign = 'center';
       topCtx.textBaseline = 'bottom';
-      topCtx.lineWidth = 3.0;
-      topCtx.strokeStyle = 'rgba(12, 18, 30, 0.86)';
-      topCtx.strokeText(city.n, pt.x, pt.y - 11);
-      topCtx.fillStyle = city.isIsland ? '#e0f2fe' : '#ffffff';
-      topCtx.fillText(city.n, pt.x, pt.y - 11);
+      topCtx.lineWidth = 3.2;
+      topCtx.strokeStyle = 'rgba(10, 15, 28, 0.92)';
+      topCtx.strokeText(city.n, pt.x, pt.y - 13);
+      topCtx.fillStyle = city.isIsland ? '#bae6fd' : '#ffffff';
+      topCtx.fillText(city.n, pt.x, pt.y - 13);
 
-      // 3. Dòng 2: Nhiệt độ / Chỉ số ngay bên dưới tên thành phố (giống hệt "Hanoi / 20°" trên Windy.com!)
-      topCtx.font = '700 11px "Be Vietnam Pro", -apple-system, sans-serif';
-      topCtx.lineWidth = 2.8;
-      topCtx.strokeStyle = 'rgba(12, 18, 30, 0.86)';
-      topCtx.strokeText(valStr, pt.x, pt.y + 1);
-      topCtx.fillStyle = '#f8fafc';
-      topCtx.fillText(valStr, pt.x, pt.y + 1);
+      // 3. Viên thuốc nhỏ gọn chứa nhiệt độ / tốc độ gió ngay dưới tên thành phố (Cực dễ đọc, không lẫn với hạt gió!)
+      const pillW = valW;
+      const pillH = 14;
+      const pillX = pt.x - pillW / 2;
+      const pillY = pt.y - 13;
+
+      topCtx.beginPath();
+      if (topCtx.roundRect) {
+        topCtx.roundRect(pillX, pillY, pillW, pillH, 7);
+      } else {
+        topCtx.rect(pillX, pillY, pillW, pillH);
+      }
+      topCtx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      topCtx.fill();
+      topCtx.lineWidth = 0.8;
+      topCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+      topCtx.stroke();
+
+      topCtx.font = '800 10.5px "Be Vietnam Pro", -apple-system, sans-serif';
+      topCtx.textBaseline = 'middle';
+      topCtx.fillStyle = valColor;
+      topCtx.fillText(valStr, pt.x, pillY + pillH / 2 + 0.5);
     });
 
     topCtx.restore();
   }
 
   /* ══════════════════════════════════════════════════════════════
-     MARCHING SQUARES ISOBAR CONTOURS & H / L CENTERS
+     MARCHING SQUARES ISOBAR CONTOURS
   ══════════════════════════════════════════════════════════════ */
   function drawRealMarchingSquaresIsobars(W, H) {
     if (!mapInstance || !topCtx || meteoGrid.length !== GRID_ROWS * GRID_COLS) return;
@@ -1505,11 +1532,11 @@
 
     const levels = [1000, 1004, 1008, 1012, 1016, 1020, 1024];
     topCtx.save();
-    topCtx.lineWidth = 1.15;
+    topCtx.lineWidth = 1.2;
 
     levels.forEach(level => {
       const isMajor = level === 1012 || level % 8 === 0;
-      topCtx.strokeStyle = isMajor ? 'rgba(255, 255, 255, 0.65)' : 'rgba(255, 255, 255, 0.38)';
+      topCtx.strokeStyle = isMajor ? 'rgba(255, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.4)';
 
       const path = new Path2D();
       let labelPos = null;
@@ -1563,12 +1590,12 @@
         const [lx, ly] = labelPos;
         topCtx.font = 'bold 9.5px "Be Vietnam Pro", sans-serif';
         topCtx.lineWidth = 2.5;
-        topCtx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
+        topCtx.strokeStyle = 'rgba(15, 23, 42, 0.88)';
         topCtx.textAlign = 'center';
         topCtx.textBaseline = 'middle';
-        topCtx.strokeText(`${level}`, lx, ly);
+        topCtx.strokeText(`${level} hPa`, lx, ly);
         topCtx.fillStyle = '#ffffff';
-        topCtx.fillText(`${level}`, lx, ly);
+        topCtx.fillText(`${level} hPa`, lx, ly);
       }
     });
 
@@ -1576,7 +1603,7 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     INTERACTIVE WEATHER PROBE & LIVE REAL SPOT FORECAST
+     INTERACTIVE WEATHER PICKER FLAG & LIVE REAL SPOT FORECAST
   ══════════════════════════════════════════════════════════════ */
   function handleMapHover(e) {
     if (!mapInstance || !topCanvas || isMapMoving) return;
@@ -1606,27 +1633,62 @@
   }
 
   function drawWeatherProbeMarker() {
-    if (!topCtx || !mapInstance) return;
+    if (!topCtx || !mapInstance || !pinnedProbe) return;
 
-    if (pinnedProbe) {
-      const pt = mapInstance.latLngToContainerPoint([pinnedProbe.lat, pinnedProbe.lon]);
-      topCtx.save();
-      const pulse = 10 + Math.sin(performance.now() * 0.006) * 2.5;
-      topCtx.beginPath();
-      topCtx.arc(pt.x, pt.y, pulse, 0, Math.PI * 2);
-      topCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      topCtx.lineWidth = 2;
-      topCtx.stroke();
+    const pt = mapInstance.latLngToContainerPoint([pinnedProbe.lat, pinnedProbe.lon]);
+    const wind = sampleWindVector(pinnedProbe.lat, pinnedProbe.lon);
+    const temp = sampleGridScalarO1(pinnedProbe.lat, pinnedProbe.lon, 'temp').toFixed(1);
 
-      topCtx.beginPath();
-      topCtx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
-      topCtx.fillStyle = '#f97316';
-      topCtx.fill();
-      topCtx.lineWidth = 1.8;
-      topCtx.strokeStyle = '#ffffff';
-      topCtx.stroke();
-      topCtx.restore();
+    topCtx.save();
+
+    // Vòng tròn tâm điểm đo
+    const pulse = 9 + Math.sin(performance.now() * 0.006) * 2.5;
+    topCtx.beginPath();
+    topCtx.arc(pt.x, pt.y, pulse, 0, Math.PI * 2);
+    topCtx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
+    topCtx.lineWidth = 2;
+    topCtx.stroke();
+
+    topCtx.beginPath();
+    topCtx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+    topCtx.fillStyle = '#f97316';
+    topCtx.fill();
+    topCtx.lineWidth = 1.8;
+    topCtx.strokeStyle = '#ffffff';
+    topCtx.stroke();
+
+    // Cây kim & Cờ hiển thị trực tiếp tại điểm chạm (Giống hệt Weather Picker của Windy.com!)
+    const flagY = pt.y - 34;
+    topCtx.beginPath();
+    topCtx.moveTo(pt.x, pt.y - 5);
+    topCtx.lineTo(pt.x, flagY);
+    topCtx.strokeStyle = '#ffffff';
+    topCtx.lineWidth = 2;
+    topCtx.stroke();
+
+    const flagTxt = `${pinnedProbe.tempStr || (temp + '°C')} · 💨 ${pinnedProbe.windStr || (Math.round(wind.spd) + ' km/h')}`;
+    topCtx.font = '800 11.5px "Be Vietnam Pro", sans-serif';
+    const fw = topCtx.measureText(flagTxt).width + 18;
+    const fh = 24;
+
+    topCtx.beginPath();
+    if (topCtx.roundRect) {
+      topCtx.roundRect(pt.x - 4, flagY - fh, fw, fh, 7);
+    } else {
+      topCtx.rect(pt.x - 4, flagY - fh, fw, fh);
     }
+    topCtx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    topCtx.fill();
+    topCtx.lineWidth = 1.2;
+    topCtx.strokeStyle = '#fbbf24';
+    topCtx.stroke();
+
+    topCtx.fillStyle = '#fde047';
+    topCtx.textAlign = 'left';
+    topCtx.textBaseline = 'middle';
+    topCtx.fillText(flagTxt, pt.x + 5, flagY - fh / 2);
+
+    topCtx.restore();
   }
 
   function updateHoverTooltip(probe) {
@@ -1655,7 +1717,7 @@
     tip.style.display = 'block';
     const maxX = window.innerWidth - 220;
     const x = Math.min(probe.px + 14, maxX);
-    const y = Math.max(54, probe.py - 46);
+    const y = Math.max(84, probe.py - 46);
     tip.style.left = `${x}px`;
     tip.style.top  = `${y}px`;
   }
@@ -1706,6 +1768,11 @@
         `Tọa độ (${coordStr})`;
 
       const c = wxRes.current;
+      if (pinnedProbe) {
+        pinnedProbe.tempStr = `${c.temperature_2m.toFixed(1)}°C`;
+        pinnedProbe.windStr = `${Math.round(c.wind_speed_10m)} km/h`;
+      }
+
       const dirs = ['Bắc', 'Đông Bắc', 'Đông', 'Đông Nam', 'Nam', 'Tây Nam', 'Tây', 'Tây Bắc'];
       const dirLabel = dirs[Math.round((c.wind_direction_10m || 0) / 45) % 8];
 
@@ -1780,9 +1847,6 @@
     }
   }
 
-  /* ══════════════════════════════════════════════════════════════
-     COMPACT INLINE COLOR SCALE BAR (GIỐNG GÓC DƯỚI PHẢI WINDY.COM)
-  ══════════════════════════════════════════════════════════════ */
   function updateLegend() {
     const cfg = LAYER_RANGES[currentLayer] || LAYER_RANGES.temp;
     const pal = COLOR_PALETTES[currentLayer] || COLOR_PALETTES.temp;

@@ -6,13 +6,17 @@ const NOMINATIM_URL   = 'https://nominatim.openstreetmap.org/search';
 
 const $ = id => document.getElementById(id);
 const setText = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+const setMeter = (id, pct) => {
+  const el = $(id);
+  if (el) el.style.width = `${Math.max(4, Math.min(100, Math.round(pct)))}%`;
+};
 
 let map, marker, hourlyChart = null, modalChartInstance = null, modalPrecipChartInstance = null;
 let currentWeatherData = null, currentAirQualityData = null, currentPlaceName = 'Hà Nội';
 let activeAcAbortCtrl = null;
 let activeWxAbortCtrl = null;
 
-const CACHE_TTL_WEATHER = 10 * 60 * 1000; // 10 phút cho dữ liệu thời tiết thực
+const CACHE_TTL_WEATHER = 10 * 60 * 1000;
 const CACHE_TTL_GEOCODE = 7 * 24 * 60 * 60 * 1000;
 const CACHE_TTL_AIR     = 15 * 60 * 1000;
 
@@ -55,59 +59,53 @@ function getWeatherEmoji(code, isDay = true) {
   return isDay ? '🌤️' : '🌙';
 }
 
-function windDirectionArrow(deg) {
-  if (deg == null || isNaN(deg)) return '';
-  const dirs = ['↓ Bắc', '↙ ĐB', '← Đông', '↖ ĐN', '↑ Nam', '↗ TN', '→ Tây', '↘ TB'];
-  return dirs[Math.round(deg / 45) % 8] || '';
-}
-
 function windDirectionFull(deg) {
   if (deg == null || isNaN(deg)) return 'Không rõ';
   const dirs = ['Bắc (N)', 'Đông Bắc (NE)', 'Đông (E)', 'Đông Nam (SE)', 'Nam (S)', 'Tây Nam (SW)', 'Tây (W)', 'Tây Bắc (NW)'];
-  return `${dirs[Math.round(deg / 45) % 8]} (${Math.round(deg)}°)`;
+  return `Hướng ${dirs[Math.round(deg / 45) % 8]}`;
 }
 
 function getAqiInfo(aqi) {
-  if (aqi <= 20) return { color: '#22c55e', label: 'Tốt', desc: 'Chất lượng không khí rất tốt (Châu Âu AQI)' };
-  if (aqi <= 40) return { color: '#84cc16', label: 'Khá', desc: 'Chất lượng không khí chấp nhận được' };
-  if (aqi <= 60) return { color: '#eab308', label: 'Trung bình', desc: 'Nhóm nhạy cảm nên hạn chế ở ngoài lâu' };
-  if (aqi <= 80) return { color: '#f97316', label: 'Kém', desc: 'Chất lượng không khí kém' };
-  if (aqi <= 100) return { color: '#ef4444', label: 'Xấu', desc: 'Chất lượng không khí xấu, có hại sức khỏe' };
-  return { color: '#a855f7', label: 'Nguy hại', desc: 'Cảnh báo ô nhiễm không khí nghiêm trọng' };
+  if (aqi <= 20) return { color: '#16a34a', darkColor: '#4ade80', label: 'Tốt', desc: 'Chất lượng không khí rất tốt (Châu Âu AQI)' };
+  if (aqi <= 40) return { color: '#65a30d', darkColor: '#a3e635', label: 'Khá', desc: 'Chất lượng không khí chấp nhận được' };
+  if (aqi <= 60) return { color: '#ca8a04', darkColor: '#facc15', label: 'Trung bình', desc: 'Nhóm nhạy cảm nên hạn chế ở ngoài lâu' };
+  if (aqi <= 80) return { color: '#ea580c', darkColor: '#fb923c', label: 'Kém', desc: 'Chất lượng không khí kém' };
+  if (aqi <= 100) return { color: '#dc2626', darkColor: '#f87171', label: 'Xấu', desc: 'Chất lượng không khí xấu, có hại sức khỏe' };
+  return { color: '#9333ea', darkColor: '#c084fc', label: 'Nguy hại', desc: 'Cảnh báo ô nhiễm không khí nghiêm trọng' };
 }
 
 function getUvInfo(uv) {
-  if (uv == null || isNaN(uv)) return { color: '#94a3b8', label: 'N/A' };
-  if (uv < 3) return { color: '#22c55e', label: 'Thấp' };
-  if (uv < 6) return { color: '#eab308', label: 'TB' };
-  if (uv < 8) return { color: '#f97316', label: 'Cao' };
-  if (uv < 11) return { color: '#ef4444', label: 'Rất cao' };
-  return { color: '#a855f7', label: 'Cực đoan' };
+  if (uv == null || isNaN(uv)) return { color: '#64748b', darkColor: '#94a3b8', label: 'N/A' };
+  if (uv < 3) return { color: '#16a34a', darkColor: '#4ade80', label: 'Thấp' };
+  if (uv < 6) return { color: '#ca8a04', darkColor: '#facc15', label: 'TB' };
+  if (uv < 8) return { color: '#ea580c', darkColor: '#fb923c', label: 'Cao' };
+  if (uv < 11) return { color: '#dc2626', darkColor: '#f87171', label: 'Rất cao' };
+  return { color: '#9333ea', darkColor: '#c084fc', label: 'Cực đoan' };
 }
 
 function getWeatherGradient(code, isDay) {
-  if ([0, 1].includes(code) && isDay) return 'linear-gradient(135deg, #38bdf8 0%, #0284c7 60%, #0369a1 100%)';
-  if ([0, 1].includes(code) && !isDay) return 'linear-gradient(135deg, #0b132b 0%, #1c2541 60%, #3a506b 100%)';
-  if ([2, 3].includes(code)) return isDay ? 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%)';
-  if ([45, 48].includes(code)) return 'linear-gradient(135deg, #475569 0%, #64748b 50%, #94a3b8 100%)';
+  if ([0, 1].includes(code) && isDay) return 'linear-gradient(135deg, #0284c7 0%, #0369a1 55%, #1e3a8a 100%)';
+  if ([0, 1].includes(code) && !isDay) return 'linear-gradient(135deg, #090f24 0%, #16213e 60%, #1e293b 100%)';
+  if ([2, 3].includes(code)) return isDay ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #1e3a8a 100%)' : 'linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #334155 100%)';
+  if ([45, 48].includes(code)) return 'linear-gradient(135deg, #334155 0%, #475569 55%, #64748b 100%)';
   if ([51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a5f 100%)';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'linear-gradient(135deg, #334155 0%, #64748b 50%, #93c5fd 100%)';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'linear-gradient(135deg, #334155 0%, #475569 50%, #64748b 100%)';
   if ([95, 96, 99].includes(code)) return 'linear-gradient(135deg, #090d16 0%, #111827 50%, #1e293b 100%)';
-  return isDay ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'linear-gradient(135deg, #0b132b 0%, #1c2541 100%)';
+  return isDay ? 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)' : 'linear-gradient(135deg, #090f24 0%, #16213e 100%)';
 }
 
 function wmoToDescription(code) {
   const codes = {
-    0: 'Trời quang mây', 1: 'Ít mây, nắng đẹp', 2: 'Mây rải rác', 3: 'Nhiều mây âm u',
-    45: 'Sương mù nhẹ', 48: 'Sương mù dày đặc',
+    0: 'Trời quang mây', 1: 'Ít mây, nắng đẹp', 2: 'Mây rải rác', 3: 'Nhiều mây',
+    45: 'Sương mù nhẹ', 48: 'Sương mù dày',
     51: 'Mưa phùn nhẹ', 53: 'Mưa phùn vừa', 55: 'Mưa phùn dày',
-    56: 'Mưa phùn lạnh nhẹ', 57: 'Mưa phùn lạnh nặng',
+    56: 'Mưa phùn lạnh', 57: 'Mưa phùn lạnh nặng',
     61: 'Mưa nhỏ', 63: 'Mưa vừa', 65: 'Mưa to',
     66: 'Mưa lạnh nhẹ', 67: 'Mưa lạnh to',
-    71: 'Tuyết rơi nhẹ', 73: 'Tuyết rơi vừa', 75: 'Tuyết rơi dày', 77: 'Mưa tuyết hạt',
+    71: 'Tuyết nhẹ', 73: 'Tuyết vừa', 75: 'Tuyết dày', 77: 'Mưa tuyết hạt',
     80: 'Mưa rào nhẹ', 81: 'Mưa rào vừa', 82: 'Mưa rào rất to',
     85: 'Tuyết rào nhẹ', 86: 'Tuyết rào dày',
-    95: 'Dông sét', 96: 'Dông kèm mưa đá nhỏ', 99: 'Dông bão & mưa đá lớn'
+    95: 'Dông sét', 96: 'Dông mưa đá nhỏ', 99: 'Dông bão lớn'
   };
   return codes[code] ?? 'Không xác định';
 }
@@ -119,7 +117,34 @@ function wmoToIcon(code, isDay = true) {
 function weatherToStyle(code, isDay) {
   const bg = getWeatherGradient(code, isDay);
   const isDark = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 95, 96, 99].includes(code) || !isDay;
-  return { bg, text: isDark ? '#ffffff' : '#0b2545', isDark };
+  return { bg, text: isDark ? '#ffffff' : '#0f172a', isDark };
+}
+
+function updateMiniMapMarkerBadge(lat, lon, placeName, tempStr, emoji) {
+  if (!map || !window.L) return;
+  const shortPlace = (placeName || '').split(',')[0].trim();
+  const html = `
+    <div class="mini-wx-pin">
+      <div class="mwp-bubble">
+        <span>${emoji || '🌤️'}</span>
+        <strong>${tempStr || '--°C'}</strong>
+        <small>${shortPlace}</small>
+      </div>
+      <div class="mwp-dot"></div>
+    </div>
+  `;
+  const icon = L.divIcon({
+    className: 'mini-wx-divicon',
+    html,
+    iconSize: [140, 42],
+    iconAnchor: [70, 38]
+  });
+  if (!marker) {
+    marker = L.marker([lat, lon], { icon }).addTo(map);
+  } else {
+    marker.setLatLng([lat, lon]);
+    marker.setIcon(icon);
+  }
 }
 
 function initMap(lat = 21.0285, lon = 105.8542) {
@@ -127,24 +152,21 @@ function initMap(lat = 21.0285, lon = 105.8542) {
     map = L.map('map', {
       zoomControl: true,
       attributionControl: false
-    }).setView([lat, lon], 10);
+    }).setView([lat, lon], 9);
 
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 19
     }).addTo(map);
 
-    marker = L.marker([lat, lon]).addTo(map);
+    updateMiniMapMarkerBadge(lat, lon, 'Hà Nội', '--°C', '🌤️');
 
     map.on('click', function (e) {
       const { lat: cLat, lng: cLng } = e.latlng;
-      marker.setLatLng([cLat, cLng]);
-      const coordLabel = `${cLat.toFixed(3)}°N, ${cLng.toFixed(3)}°E`;
+      const coordLabel = `${cLat.toFixed(2)}°N, ${cLng.toFixed(2)}°E`;
       setText('meta', `📍 Đang tải thời tiết thực tế tại ${coordLabel}...`);
 
-      // Tải thời tiết NGAY LẬP TỨC không chờ reverse geocode để phản hồi tức thì
       fetchWeatherAndRender(cLat, cLng, `Tọa độ (${coordLabel})`);
 
-      // Chạy song song reverse geocode để cập nhật tên địa danh chính xác
       fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${cLat}&lon=${cLng}&zoom=14&addressdetails=1&accept-language=vi`)
         .then(res => res.ok ? res.json() : null)
         .then(data => {
@@ -154,17 +176,25 @@ function initMap(lat = 21.0285, lon = 105.8542) {
             currentPlaceName = placeName;
             setText('location', placeName);
             setText('meta', `✅ Thời tiết thực tế tại: ${placeName}`);
+            if (currentWeatherData?.current) {
+              const cur = currentWeatherData.current;
+              updateMiniMapMarkerBadge(
+                cLat,
+                cLng,
+                placeName,
+                `${Math.round(cur.temperature_2m)}°C`,
+                getWeatherEmoji(cur.weather_code, cur.is_day === 1)
+              );
+            }
           }
         })
         .catch(() => {});
     });
   } else {
-    map.setView([lat, lon], Math.max(9, map.getZoom()));
-    marker.setLatLng([lat, lon]);
+    map.setView([lat, lon], Math.max(8, map.getZoom()));
   }
 }
 
-// Tìm kiếm địa chỉ song song cực nhanh (Open-Meteo + Nominatim)
 async function lookup(q) {
   try {
     setText('meta', '🔍 Đang định vị địa điểm...');
@@ -181,7 +211,6 @@ async function lookup(q) {
       return lsCached;
     }
 
-    // Chạy song song Open-Meteo Geocoding và Nominatim để không tốn thời gian chờ tuần tự
     const [omLoc, nomLoc] = await Promise.all([
       lookupOpenMeteo(q),
       lookupNominatim(q)
@@ -248,9 +277,8 @@ function showSkeleton() {
     $('skeletonPanel')?.classList.remove('hidden');
     $('rightPanel')?.classList.add('hidden');
   } else {
-    // Khi đã có giao diện, chỉ làm mờ nhẹ để chuyển đổi mượt mà tức thì, không giật layout
     const rp = $('rightPanel');
-    if (rp) rp.style.opacity = '0.6';
+    if (rp) rp.style.opacity = '0.65';
   }
 }
 
@@ -263,12 +291,11 @@ function hideSkeleton() {
   }
 }
 
-// Tìm chỉ số giờ hiện tại khớp chính xác với múi giờ địa phương từ Open-Meteo
 function findCurrentHourlyIndex(weather) {
   if (!weather?.hourly?.time?.length) return 0;
   const curTimeStr = weather.current?.time || weather.current_weather?.time;
   if (curTimeStr) {
-    const hourPrefix = curTimeStr.slice(0, 13); // "YYYY-MM-DDTHH"
+    const hourPrefix = curTimeStr.slice(0, 13);
     const idx = weather.hourly.time.findIndex(t => t.slice(0, 13) === hourPrefix);
     if (idx !== -1) return idx;
   }
@@ -285,12 +312,23 @@ function findCurrentHourlyIndex(weather) {
   return bestIdx;
 }
 
+function highlightActiveSuggestion(placeName) {
+  const box = $('suggestion-box');
+  if (!box) return;
+  const norm = (placeName || '').toLowerCase();
+  box.querySelectorAll('.example').forEach(btn => {
+    const q = (btn.dataset.name || '').toLowerCase();
+    btn.classList.toggle('active', q && norm.includes(q));
+  });
+}
+
 async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) {
   const numLat = Number(lat);
   const numLon = Number(lon);
   if (isNaN(numLat) || isNaN(numLon)) return;
 
   currentPlaceName = placeName || currentPlaceName;
+  highlightActiveSuggestion(currentPlaceName);
   showSkeleton();
 
   const cacheKeyWx = `wx_v3_${numLat.toFixed(2)},${numLon.toFixed(2)}`;
@@ -304,7 +342,6 @@ async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) 
       if (activeWxAbortCtrl) activeWxAbortCtrl.abort();
       activeWxAbortCtrl = new AbortController();
 
-      // Sử dụng đầy đủ trường dữ liệu thực tế từ Open-Meteo Forecast API
       const params = new URLSearchParams({
         latitude: numLat.toFixed(4),
         longitude: numLon.toFixed(4),
@@ -379,7 +416,6 @@ async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) 
       weather = await wRes.json();
       airQuality = aRes && aRes.ok ? await aRes.json() : null;
 
-      // Chuẩn hóa tương thích cho các module khác
       if (weather.current) {
         weather.current_weather = {
           temperature: weather.current.temperature_2m,
@@ -424,7 +460,6 @@ async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) 
     currentAirQualityData = airQuality;
     window.currentAirQualityData = airQuality;
 
-    // Lưu vị trí gần nhất để lần mở trang tiếp theo tải ngay lập tức (0ms delay)
     lsSet('last_location_v3', { lat: numLat, lon: numLon, name: currentPlaceName }, 30 * 24 * 60 * 60 * 1000);
 
     render(weather, airQuality, currentPlaceName);
@@ -466,16 +501,16 @@ async function renderHourlyChart(weather) {
     const idx = sIdx + i;
     if (idx >= weather.hourly.time.length) break;
     const rawTime = weather.hourly.time[idx];
-    const hourStr = rawTime.slice(11, 16) || (new Date(rawTime).getHours().toString().padStart(2, '0') + ':00');
-    labels.push(i === 0 ? 'Hiện tại' : hourStr);
+    const hourStr = rawTime.slice(11, 16) || '00:00';
+    labels.push(i === 0 ? 'Bây giờ' : hourStr);
     temps.push(Number(weather.hourly.temperature_2m[idx].toFixed(1)));
     precips.push(Number((weather.hourly.precipitation?.[idx] || 0).toFixed(2)));
     pops.push(weather.hourly.precipitation_probability?.[idx] ?? 0);
   }
 
   const isDark = document.body.classList.contains('dark-theme');
-  const tickColor = isDark ? '#e2e8f0' : '#0b2545';
-  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(11,37,69,0.07)';
+  const tickColor = isDark ? '#cbd5e1' : '#1e293b';
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)';
 
   hourlyChart = new Chart(ctx, {
     type: 'line',
@@ -485,10 +520,10 @@ async function renderHourlyChart(weather) {
         {
           label: 'Nhiệt độ (°C)',
           data: temps,
-          borderColor: isDark ? '#fbbf24' : '#f97316',
-          backgroundColor: isDark ? 'rgba(251, 191, 36, 0.16)' : 'rgba(249, 115, 22, 0.16)',
+          borderColor: isDark ? '#fbbf24' : '#ea580c',
+          backgroundColor: isDark ? 'rgba(251, 191, 36, 0.16)' : 'rgba(234, 88, 12, 0.14)',
           borderWidth: 2.5,
-          tension: 0.38,
+          tension: 0.36,
           pointRadius: 2.5,
           pointHoverRadius: 6,
           fill: true,
@@ -497,8 +532,8 @@ async function renderHourlyChart(weather) {
         {
           label: 'Lượng mưa (mm)',
           data: precips,
-          borderColor: 'rgba(56, 189, 248, 0.9)',
-          backgroundColor: 'rgba(56, 189, 248, 0.35)',
+          borderColor: 'rgba(14, 165, 233, 0.9)',
+          backgroundColor: 'rgba(14, 165, 233, 0.42)',
           borderRadius: 4,
           type: 'bar',
           yAxisID: 'yPrecip'
@@ -508,12 +543,12 @@ async function renderHourlyChart(weather) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 350 },
+      animation: { duration: 300 },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
           titleColor: '#f8fafc',
           bodyColor: '#e2e8f0',
           borderColor: 'rgba(56, 189, 248, 0.4)',
@@ -523,7 +558,7 @@ async function renderHourlyChart(weather) {
             label: c => {
               if (c.datasetIndex === 0) return `🌡️ Nhiệt độ: ${c.raw}°C`;
               const popVal = pops[c.dataIndex] ?? 0;
-              return `🌧️ Lượng mưa: ${c.raw} mm (XS mưa: ${popVal}%)`;
+              return `🌧️ Lượng mưa: ${c.raw} mm (Khả năng mưa: ${popVal}%)`;
             }
           }
         }
@@ -533,7 +568,7 @@ async function renderHourlyChart(weather) {
           type: 'linear',
           position: 'left',
           grid: { color: gridColor },
-          ticks: { color: tickColor, font: { weight: '600', size: 11 }, callback: v => v + '°' }
+          ticks: { color: tickColor, font: { weight: '700', size: 11 }, callback: v => v + '°' }
         },
         yPrecip: {
           type: 'linear',
@@ -541,11 +576,11 @@ async function renderHourlyChart(weather) {
           beginAtZero: true,
           suggestedMax: 2,
           grid: { display: false },
-          ticks: { color: isDark ? '#38bdf8' : '#0284c7', font: { weight: '600', size: 10 }, callback: v => v + 'mm' }
+          ticks: { color: isDark ? '#38bdf8' : '#0284c7', font: { weight: '700', size: 10 }, callback: v => v + 'mm' }
         },
         x: {
           grid: { display: false },
-          ticks: { color: tickColor, font: { weight: '600', size: 10.5 }, maxTicksLimit: 12, maxRotation: 0 }
+          ticks: { color: tickColor, font: { weight: '700', size: 10.5 }, maxTicksLimit: 12, maxRotation: 0 }
         }
       }
     }
@@ -601,7 +636,7 @@ function renderHourlyTiles(weather) {
       <div class="hour-time">${i === 0 ? 'Bây giờ' : hour}</div>
       <div class="hour-icon">${icon}</div>
       <div class="hour-temp">${temp}°</div>
-      <div class="hour-pop" style="opacity:${pop >= 15 ? 1 : 0.45}">💧 ${pop}%</div>
+      <div class="hour-pop" style="opacity:${pop >= 15 ? 1 : 0.5}">💧 ${pop}%</div>
       <div class="hour-wind">💨 ${wind}km/h</div>
     `;
     frag.appendChild(div);
@@ -632,18 +667,20 @@ function renderDailyForecast(weather) {
       ? 'Hôm nay'
       : i === 1
       ? 'Ngày mai'
-      : d.toLocaleDateString('vi-VN', { weekday: 'short' }) + ' ' + d.getDate() + '/' + (d.getMonth() + 1);
+      : d.toLocaleDateString('vi-VN', { weekday: 'short' }) + ', ' + d.getDate() + '/' + (d.getMonth() + 1);
 
+    const code = weather.daily.weathercode[i];
     const tMax = Math.round(weather.daily.temperature_2m_max[i]);
     const tMin = Math.round(weather.daily.temperature_2m_min[i]);
     const pop = weather.daily.precipitation_probability_max?.[i] ?? 0;
     const rainSum = weather.daily.precipitation_sum?.[i] ?? 0;
     const leftPct = Math.max(0, Math.min(100, ((tMin - weekMin) / rangeSpan) * 100));
-    const widthPct = Math.max(12, Math.min(100 - leftPct, ((tMax - tMin) / rangeSpan) * 100));
+    const widthPct = Math.max(14, Math.min(100 - leftPct, ((tMax - tMin) / rangeSpan) * 100));
 
     div.innerHTML = `
       <div class="daily-day">${dayLabel}</div>
-      <div class="daily-icon">${wmoToIcon(weather.daily.weathercode[i], true)}</div>
+      <div class="daily-icon">${wmoToIcon(code, true)}</div>
+      <div class="daily-cond">${wmoToDescription(code)}</div>
       <div class="daily-temp">
         <span class="daily-tmax">${tMax}°</span>
         <span class="daily-tmin">${tMin}°</span>
@@ -663,7 +700,7 @@ async function showDetailModal(weather, airQuality, dayIndex) {
   const modal = $('detailModal');
   if (!modal || !weather.daily?.time?.[dayIndex]) return;
 
-  const targetDateStr = weather.daily.time[dayIndex]; // "YYYY-MM-DD"
+  const targetDateStr = weather.daily.time[dayIndex];
   const selectedDate = new Date(targetDateStr + 'T00:00:00');
   const dateStr = selectedDate.toLocaleDateString('vi-VN', {
     weekday: 'long',
@@ -672,7 +709,6 @@ async function showDetailModal(weather, airQuality, dayIndex) {
     year: 'numeric'
   });
 
-  // Lọc ĐÚNG các giờ của ngày được chọn (Sửa lỗi lấy nhầm weathercode của ngày đầu tiên)
   const dayHours = [];
   for (let i = 0; i < weather.hourly.time.length; i++) {
     const tStr = weather.hourly.time[i];
@@ -735,9 +771,9 @@ async function showDetailModal(weather, airQuality, dayIndex) {
         datasets: [{
           label: 'Nhiệt độ (°C)',
           data: temps,
-          borderColor: '#f97316',
-          backgroundColor: 'rgba(249,115,22,0.14)',
-          tension: 0.38,
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234,88,12,0.14)',
+          tension: 0.36,
           pointRadius: 3.5,
           fill: true
         }]
@@ -746,7 +782,7 @@ async function showDetailModal(weather, airQuality, dayIndex) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, labels: { font: { size: 12, weight: '600' } } },
+          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
           tooltip: { callbacks: { label: c => `🌡️ ${c.raw}°C` } }
         },
         scales: {
@@ -780,7 +816,7 @@ async function showDetailModal(weather, airQuality, dayIndex) {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, labels: { font: { size: 12, weight: '600' } } },
+          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
           tooltip: { callbacks: { label: c => `🌧️ ${c.raw} mm (XS: ${dayHours[c.dataIndex]?.pop ?? 0}%)` } }
         },
         scales: {
@@ -791,7 +827,6 @@ async function showDetailModal(weather, airQuality, dayIndex) {
     });
   }
 
-  // Hourly tiles trong modal với đúng icon và dữ liệu của ngày đã chọn
   const modalHourly = $('modalHourlyTiles');
   if (modalHourly) {
     modalHourly.innerHTML = '';
@@ -853,31 +888,23 @@ function render(weather, airQuality, placeName) {
   document.body.classList.toggle('dark-theme', !!style.isDark);
 
   const themeEl = document.querySelector('meta[name="theme-color"]');
-  if (themeEl) themeEl.setAttribute('content', isDay ? '#38bdf8' : '#0b132b');
+  if (themeEl) themeEl.setAttribute('content', isDay ? '#0284c7' : '#090f24');
 
-  // Nhiệt độ thực tế hiện tại
   const realTemp = cur.temperature_2m ?? cw.temperature ?? weather.hourly?.temperature_2m?.[hIdx] ?? 0;
   const tempTarget = Math.round(realTemp);
-  const tempEl = $('temp');
-  if (tempEl) {
-    tempEl.textContent = `${tempTarget}°C`;
-  }
-
+  setText('temp', `${tempTarget}°C`);
   setText('condition', wmoToDescription(code));
   setText('location', placeName);
 
-  // Nhiệt độ Cao / Thấp hôm nay từ daily thực tế
   const todayMax = weather.daily?.temperature_2m_max?.[0];
   const todayMin = weather.daily?.temperature_2m_min?.[0];
   if (todayMax != null && todayMin != null) {
-    setText('tempMinMax', `Cao: ${Math.round(todayMax)}° · Thấp: ${Math.round(todayMin)}°`);
+    setText('tempMinMax', `▲ Cao: ${Math.round(todayMax)}°  ·  ▼ Thấp: ${Math.round(todayMin)}°`);
   }
 
-  // Cảm giác thực tế (apparent_temperature từ Open-Meteo)
   const feelsVal = cur.apparent_temperature ?? weather.hourly?.apparent_temperature?.[hIdx] ?? realTemp;
   setText('feels', `🌡️ Cảm giác ${Math.round(feelsVal)}°C`);
 
-  // Gió giật & Áp suất khí quyển thực tế
   const windGust = cur.wind_gusts_10m ?? weather.hourly?.wind_gusts_10m?.[hIdx];
   const gustBadge = $('windGustBadge');
   if (gustBadge) {
@@ -894,49 +921,53 @@ function render(weather, airQuality, placeName) {
     setText('pressureBadge', `📊 Áp suất ${Math.round(surfacePres)} hPa`);
   }
 
-  // 1. Độ ẩm & Điểm sương thực tế
-  const humidVal = cur.relative_humidity_2m ?? weather.hourly?.relative_humidity_2m?.[hIdx];
-  setText('humidity', humidVal != null ? `${Math.round(humidVal)}%` : '--%');
+  // 1. Độ ẩm & Điểm sương
+  const humidVal = cur.relative_humidity_2m ?? weather.hourly?.relative_humidity_2m?.[hIdx] ?? 0;
+  setText('humidity', `${Math.round(humidVal)}%`);
+  setMeter('humidityMeter', humidVal);
   const dewVal = weather.hourly?.dew_point_2m?.[hIdx];
-  setText('dewPoint', dewVal != null ? `Điểm sương ${Math.round(dewVal)}°C` : 'Thực tế từ trạm');
+  setText('dewPoint', dewVal != null ? `Điểm sương ${Math.round(dewVal)}°C` : 'Quan trắc thực tế');
 
-  // 2. Gió & Hướng gió thực tế
+  // 2. Gió & Hướng gió
   const windSpd = cur.wind_speed_10m ?? cw.windspeed ?? 0;
   const windDir = cur.wind_direction_10m ?? cw.winddirection ?? 0;
   setText('wind', `${Math.round(windSpd)} km/h`);
+  setMeter('windMeter', (windSpd / 60) * 100);
   setText('windDirSub', windDirectionFull(windDir));
 
-  // 3. Lượng mưa & Độ che phủ mây thực tế
+  // 3. Lượng mưa & Độ che phủ mây
   const precipVal = cur.precipitation ?? weather.hourly?.precipitation?.[hIdx] ?? 0;
   const cloudVal = cur.cloud_cover ?? weather.hourly?.cloud_cover?.[hIdx] ?? 0;
   setText('precip', `${Number(precipVal).toFixed(1)} mm`);
+  setMeter('precipMeter', precipVal > 0 ? Math.min(100, (precipVal / 10) * 100) : (cloudVal * 0.35));
   setText('cloudCoverSub', `Mây che phủ ${Math.round(cloudVal)}%`);
 
-  // 4. Khả năng mưa & Tầm nhìn xa thực tế
+  // 4. Khả năng mưa & Tầm nhìn xa
   const popVal = weather.hourly?.precipitation_probability?.[hIdx] ?? 0;
   const visMeters = weather.hourly?.visibility?.[hIdx];
   setText('pop', `${popVal}%`);
+  setMeter('popMeter', popVal);
   setText('visibilitySub', visMeters != null ? `Tầm nhìn ${(visMeters / 1000).toFixed(1)} km` : 'Dự báo theo giờ');
 
-  // 5. Chỉ số UV thực tế 100% từ Open-Meteo (Tuyệt đối KHÔNG tự bịa từ nhiệt độ)
+  // 5. Chỉ số UV thực tế
   const realUvNow = cur.uv_index ?? weather.hourly?.uv_index?.[hIdx] ?? 0;
   const realUvMax = weather.daily?.uv_index_max?.[0];
   const uvInfo = getUvInfo(realUvNow);
   const uvStatEl = $('uvStat');
   if (uvStatEl) {
-    uvStatEl.textContent = `${Number(realUvNow).toFixed(1)} (${uvInfo.label})`;
-    uvStatEl.style.color = uvInfo.color;
+    uvStatEl.textContent = `${Number(realUvNow).toFixed(1)} · ${uvInfo.label}`;
+    uvStatEl.style.color = style.isDark ? uvInfo.darkColor : uvInfo.color;
   }
-  setText('uvMaxSub', realUvMax != null ? `Cực đại ngày: ${Number(realUvMax).toFixed(1)}` : 'Dữ liệu bức xạ thực');
+  setMeter('uvMeter', (realUvNow / 11) * 100);
+  setText('uvMaxSub', realUvMax != null ? `Cực đại ngày: ${Number(realUvMax).toFixed(1)}` : 'Bức xạ thực tế');
 
   const uvChip = $('uvIndex');
   if (uvChip) {
     uvChip.textContent = `☀️ UV ${Number(realUvNow).toFixed(1)} (${uvInfo.label})`;
     uvChip.style.display = 'inline-block';
-    uvChip.style.color = uvInfo.color;
   }
 
-  // 6. Chất lượng không khí (AQI & PM2.5 thực tế từ Open-Meteo Air Quality API)
+  // 6. Chất lượng không khí (AQI & PM2.5)
   const aqiVal = airQuality?.current?.european_aqi;
   const pm25Val = airQuality?.current?.pm2_5;
   const aqiEl = $('aqi');
@@ -944,16 +975,18 @@ function render(weather, airQuality, placeName) {
     if (aqiVal != null) {
       const aqiInfo = getAqiInfo(aqiVal);
       aqiEl.textContent = `${aqiVal} · ${aqiInfo.label}`;
-      aqiEl.style.color = aqiInfo.color;
+      aqiEl.style.color = style.isDark ? aqiInfo.darkColor : aqiInfo.color;
       aqiEl.title = aqiInfo.desc;
+      setMeter('aqiMeter', Math.min(100, aqiVal));
     } else {
       aqiEl.textContent = 'Đang cập nhật';
       aqiEl.style.color = '';
+      setMeter('aqiMeter', 15);
     }
   }
   setText('pm25Sub', pm25Val != null ? `PM2.5: ${Number(pm25Val).toFixed(1)} µg/m³` : 'Chuẩn Châu Âu');
 
-  // Cảnh báo mưa ngắn hạn 15 phút (Nowcast thực tế)
+  // Cảnh báo mưa ngắn hạn 15 phút
   let nowcastTxt = '';
   const now = new Date();
   if (weather.minutely_15?.precipitation && weather.minutely_15?.time) {
@@ -971,15 +1004,14 @@ function render(weather, airQuality, placeName) {
   }
   setText('nowcast', nowcastTxt);
 
-  // Icon thời tiết lớn
+  const emojiNow = getWeatherEmoji(code, isDay);
   const imgEl = $('weatherImage');
   const iconEl = $('weatherIcon');
   if (imgEl && iconEl) {
     imgEl.style.display = 'none';
-    iconEl.textContent = getWeatherEmoji(code, isDay);
+    iconEl.textContent = emojiNow;
   }
 
-  // Bình minh & Hoàng hôn thực tế
   const sr0 = weather.daily?.sunrise?.[0];
   const ss0 = weather.daily?.sunset?.[0];
   const sr = sr0 ? sr0.slice(11, 16) : '--:--';
@@ -998,9 +1030,9 @@ function render(weather, airQuality, placeName) {
   renderHourlyTiles(weather);
   renderDailyForecast(weather);
 
-  if (map && marker) {
-    marker.setLatLng([weather.latitude, weather.longitude]);
-    map.setView([weather.latitude, weather.longitude], Math.max(9, map.getZoom()));
+  if (map) {
+    updateMiniMapMarkerBadge(weather.latitude, weather.longitude, placeName, `${tempTarget}°C`, emojiNow);
+    map.setView([weather.latitude, weather.longitude], Math.max(8, map.getZoom()));
   }
 
   clearInterval(window._clockInterval);
@@ -1011,7 +1043,7 @@ function render(weather, airQuality, placeName) {
 }
 
 // ══════════════════════════════════════════════
-//  FAST AUTOCOMPLETE ENGINE (PARALLEL + ABORTABLE)
+//  FAST AUTOCOMPLETE ENGINE
 // ══════════════════════════════════════════════
 
 let acDebounce = null;
@@ -1046,7 +1078,6 @@ async function fetchAutocomplete(q, signal) {
   const cacheKey = q.toLowerCase().trim();
   if (acMemoryCache.has(cacheKey)) return acMemoryCache.get(cacheKey);
 
-  // Chạy song song Open-Meteo Geocoding (cực nhanh < 120ms) & Nominatim (chi tiết thôn/xã)
   const omPromise = fetch(
     `${GEOCODE_URL_OM}?name=${encodeURIComponent(q)}&count=6&language=vi&format=json`,
     { signal }
@@ -1092,7 +1123,6 @@ async function fetchAutocomplete(q, signal) {
 
   const [omList, nomList] = await Promise.all([omPromise, nomPromise]);
 
-  // Gộp và khử trùng lặp theo tọa độ gần nhau
   const combined = [...nomList, ...omList].sort((a, b) => (b.isVN ? 1 : 0) - (a.isVN ? 1 : 0));
   const deduped = [];
   for (const item of combined) {
@@ -1276,16 +1306,17 @@ async function doSearch(q) {
   await fetchWeatherAndRender(loc.lat, loc.lon, loc.name);
 }
 
-// Danh sách gợi ý kèm tọa độ thực để khi bấm tải thời tiết TỨC THÌ (0ms geocoding!)
 const QUICK_LOCATIONS = [
-  { name: 'Hà Nội',      label: '🏛️ Hà Nội',      lat: 21.0285, lon: 105.8542 },
-  { name: 'TP.HCM',      label: '🏙️ TP.HCM',      lat: 10.8231, lon: 106.6297 },
-  { name: 'Đà Nẵng',     label: '🌊 Đà Nẵng',     lat: 16.0544, lon: 108.2022 },
-  { name: 'Hải Phòng',   label: '⚓ Hải Phòng',   lat: 20.8449, lon: 106.6881 },
-  { name: 'Huế',         label: '🏯 Huế',         lat: 16.4637, lon: 107.5909 },
-  { name: 'Nha Trang',   label: '🏖️ Nha Trang',   lat: 12.2388, lon: 109.1967 },
-  { name: 'Đà Lạt',      label: '🌲 Đà Lạt',      lat: 11.9404, lon: 108.4583 },
-  { name: 'Cần Thơ',     label: '🌴 Cần Thơ',     lat: 10.0452, lon: 105.7469 }
+  { name: 'Hà Nội',        label: '🏛️ Hà Nội',        lat: 21.0285, lon: 105.8542 },
+  { name: 'TP.HCM',        label: '🏙️ TP.HCM',        lat: 10.8231, lon: 106.6297 },
+  { name: 'Đà Nẵng',       label: '🌊 Đà Nẵng',       lat: 16.0544, lon: 108.2022 },
+  { name: 'Hải Phòng',     label: '⚓ Hải Phòng',     lat: 20.8449, lon: 106.6881 },
+  { name: 'Huế',           label: '🏯 Huế',           lat: 16.4637, lon: 107.5909 },
+  { name: 'Nha Trang',     label: '🏖️ Nha Trang',     lat: 12.2388, lon: 109.1967 },
+  { name: 'Đà Lạt',        label: '🌲 Đà Lạt',        lat: 11.9404, lon: 108.4583 },
+  { name: 'Cần Thơ',       label: '🌴 Cần Thơ',       lat: 10.0452, lon: 105.7469 },
+  { name: 'QĐ. Hoàng Sa',  label: '🏝️ Hoàng Sa',      lat: 16.5333, lon: 111.6167 },
+  { name: 'QĐ. Trường Sa', label: '🏝️ Trường Sa',     lat: 8.6439,  lon: 111.9189 }
 ];
 
 function setDefaultSuggestions() {
@@ -1295,12 +1326,12 @@ function setDefaultSuggestions() {
   QUICK_LOCATIONS.forEach(loc => {
     const b = document.createElement('button');
     b.className = 'example';
+    b.dataset.name = loc.name;
     b.textContent = loc.label;
     b.onclick = () => {
       const inp = $('address');
       if (inp) inp.value = loc.name;
       $('btnClearSearch')?.classList.remove('hidden');
-      // Bấm gợi ý là tải trực tiếp bằng tọa độ thực, phản hồi tức thì không cần tốn request geocode!
       fetchWeatherAndRender(loc.lat, loc.lon, loc.name);
     };
     box.appendChild(b);
@@ -1318,12 +1349,8 @@ function locateUser() {
     async pos => {
       const { latitude: lat, longitude: lon } = pos.coords;
       if (!map) initMap(lat, lon);
-      else {
-        map.setView([lat, lon], 11);
-        marker.setLatLng([lat, lon]);
-      }
+      else map.setView([lat, lon], 11);
 
-      // Tải thời tiết song song với reverse geocode
       const wxPromise = fetchWeatherAndRender(lat, lon, 'Vị trí GPS của bạn');
       const geoPromise = fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1&accept-language=vi`
@@ -1347,7 +1374,6 @@ function locateUser() {
   );
 }
 
-// Cho phép Bản đồ Khí tượng Windy đồng bộ điểm chọn về trang chính
 window.selectLocationFromMeteoMap = function (lat, lon, name) {
   const label = name || `${Number(lat).toFixed(2)}°N, ${Number(lon).toFixed(2)}°E`;
   const inp = $('address');
@@ -1356,17 +1382,11 @@ window.selectLocationFromMeteoMap = function (lat, lon, name) {
   fetchWeatherAndRender(lat, lon, label);
 };
 
-// ══════════════════════════════════════════════
-//  INIT (TẢI TỨC THÌ - ZERO BLOCKING)
-// ══════════════════════════════════════════════
-
 document.addEventListener('DOMContentLoaded', () => {
   const savedLoc = lsGet('last_location_v3') || { lat: 21.0285, lon: 105.8542, name: 'Hà Nội' };
 
-  initMap(savedLoc.lat, savedLoc.lon);
   setDefaultSuggestions();
-
-  // Hiển thị ngay lập tức thời tiết thực tế của vị trí đã lưu / Hà Nội (không chặn chờ Geolocation 8 giây!)
+  initMap(savedLoc.lat, savedLoc.lon);
   fetchWeatherAndRender(savedLoc.lat, savedLoc.lon, savedLoc.name);
 
   const inp = $('address');

@@ -4,42 +4,38 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#87ceeb" />
+  <meta name="theme-color" content="#0284c7" />
   <meta name="description"
-    content="Ứng dụng dự báo thời tiết trực tiếp với bản đồ khí tượng, biểu đồ nhiệt độ và cảnh báo mưa." />
+    content="Ứng dụng dự báo thời tiết trực tiếp với bản đồ khí tượng chuẩn Windy.com, biểu đồ nhiệt độ và dữ liệu thực tế Open-Meteo." />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <title>Thời tiết trực tiếp – Dự báo theo thời gian thực</title>
+  <title>Thời tiết Trực tiếp – Dự báo & Bản đồ Khí tượng Windy</title>
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com">
   <link rel="preconnect" href="https://api.open-meteo.com">
-  <link rel="preconnect" href="https://tile.openstreetmap.org">
   <link rel="preconnect" href="https://server.arcgisonline.com">
   <link rel="dns-prefetch" href="https://server.arcgisonline.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css?v=7.2" />
+  <link rel="stylesheet" href="style.css?v=8.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 </head>
 
 <body>
   <div class="wrap">
     <!-- LEFT PANEL -->
-    <div class="left">
+    <aside class="left">
       <div class="logo-row">
         <div class="logo">
           <div class="logo-icon">🌤️</div>
           <div>
-            <div class="logo-title">Thời tiết Trực tiếp</div>
+            <div class="logo-title">Thời Tiết Trực Tiếp</div>
             <div class="logo-sub">Dữ liệu thực Open-Meteo · Chuẩn Windy</div>
           </div>
         </div>
-        <button class="btn-windy-quick" id="btnMeteoMapLeft" onclick="window.openMeteoMap && window.openMeteoMap()"
-          title="Mở Bản đồ Khí tượng Windy toàn màn hình">
-          <span>🌐</span> Windy Map
-        </button>
+        <span class="live-pill">● LIVE</span>
       </div>
 
       <div class="search">
@@ -55,9 +51,9 @@
 
       <div class="meta" id="meta">Nhập địa chỉ hoặc nhấn 📍 để xem thời tiết thực tế.</div>
 
-      <div>
-        <div class="small">Địa điểm phổ biến & gần bạn</div>
-        <div id="suggestion-box" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+      <div class="suggestions-block">
+        <div class="small">⚡ Chọn nhanh địa điểm</div>
+        <div id="suggestion-box">
           <span style="font-size:12px;opacity:0.5;font-weight:500">Đang tải...</span>
         </div>
       </div>
@@ -65,17 +61,25 @@
       <div class="mini-map-card">
         <div class="mini-map-header">
           <span class="small">🗺️ Bản đồ vị trí (Chạm để xem điểm bất kỳ)</span>
-          <button type="button" class="mini-map-expand" onclick="window.openMeteoMap && window.openMeteoMap()">Phóng to
-            Windy ↗</button>
+          <button type="button" class="mini-map-expand" onclick="window.openMeteoMap && window.openMeteoMap()">Phóng to ↗</button>
         </div>
         <div id="map"></div>
+        <button type="button" class="btn-windy-banner" id="btnMeteoMapLeft"
+          onclick="window.openMeteoMap && window.openMeteoMap()">
+          <span class="bwb-icon">🌐</span>
+          <span class="bwb-text">
+            <strong>Mở Bản đồ Khí tượng Windy</strong>
+            <small>Xem luồng gió, nhiệt độ, mưa & khí áp toàn cảnh 60 FPS</small>
+          </span>
+          <span class="bwb-arrow">➔</span>
+        </button>
       </div>
 
       <footer>
         <span>⏱️ Cập nhật: <strong id="timeNow">--:-- --/--/----</strong></span>
-        <span class="footer-badge">● 100% Real API</span>
+        <span class="footer-badge">● Open-Meteo API</span>
       </footer>
-    </div>
+    </aside>
 
     <!-- SKELETON -->
     <div id="skeletonPanel" class="skeleton-panel hidden">
@@ -100,92 +104,127 @@
     </div>
 
     <!-- RIGHT PANEL -->
-    <div class="right hidden" id="rightPanel">
+    <main class="right hidden" id="rightPanel">
 
-      <!-- Current weather -->
-      <div class="current">
-        <div class="icon-big" id="weatherIcon">
-          <img src="" alt="" id="weatherImage" style="display:none">
-        </div>
-        <div class="current-info">
-          <div class="current-top-row">
-            <div class="temp-big" id="temp">--°C</div>
-            <div class="temp-hl-box">
-              <div class="condition" id="condition">--</div>
-              <div class="temp-minmax" id="tempMinMax">Cao: --° · Thấp: --°</div>
+      <!-- Current weather Hero Card -->
+      <section class="hero-card">
+        <div class="current">
+          <div class="icon-big" id="weatherIcon">
+            <img src="" alt="" id="weatherImage" style="display:none">
+          </div>
+          <div class="current-info">
+            <div class="location-small" id="location">--</div>
+            <div class="current-top-row">
+              <div class="temp-big" id="temp">--°C</div>
+              <div class="temp-hl-box">
+                <div class="condition" id="condition">--</div>
+                <div class="temp-minmax" id="tempMinMax">Cao: --° · Thấp: --°</div>
+              </div>
+            </div>
+            <div id="nowcast" class="nowcast-text"></div>
+            <div class="current-badges-row">
+              <div class="feels-like" id="feels">🌡️ Cảm giác --°C</div>
+              <div class="feels-like" id="windGustBadge" style="display:none">💨 Gió giật -- km/h</div>
+              <div class="feels-like" id="pressureBadge">📊 Áp suất -- hPa</div>
             </div>
           </div>
-          <div id="nowcast" class="nowcast-text"></div>
-          <div class="location-small" id="location">--</div>
-          <div class="current-badges-row">
-            <div class="feels-like" id="feels">Cảm giác --°C</div>
-            <div class="feels-like" id="windGustBadge" style="display:none">Gió giật -- km/h</div>
-            <div class="feels-like" id="pressureBadge">Áp suất -- hPa</div>
-          </div>
         </div>
-      </div>
 
-      <!-- Stats (Real Open-Meteo metrics) -->
-      <div class="stats-grid">
+        <div class="hero-side">
+          <div class="sun-times">
+            <span class="chip" id="sun">🌅 --:-- &mdash; 🌇 --:--</span>
+            <span class="chip" id="tzOffset">🕐 --</span>
+            <span class="chip" id="uvIndex" style="display:none">☀️ UV --</span>
+          </div>
+          <button class="meteo-map-trigger" id="btnMeteoMap" onclick="window.openMeteoMap && window.openMeteoMap()"
+            title="Mở bản đồ khí tượng trực tiếp kiểu Windy.com">
+            <span>🌐</span> Bản đồ Khí tượng Windy LIVE
+          </button>
+        </div>
+      </section>
+
+      <!-- 6-Card Real Stats Grid with Visual Gauges -->
+      <section class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">💧 Độ ẩm</div>
+          <div class="stat-top">
+            <span class="stat-label">💧 Độ ẩm</span>
+          </div>
           <div class="stat-value" id="humidity">--%</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-humid" id="humidityMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="dewPoint">Điểm sương --°</div>
         </div>
+
         <div class="stat-card">
-          <div class="stat-label">💨 Tốc độ gió</div>
+          <div class="stat-top">
+            <span class="stat-label">💨 Tốc độ gió</span>
+          </div>
           <div class="stat-value" id="wind">-- km/h</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-wind" id="windMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="windDirSub">Hướng --</div>
         </div>
+
         <div class="stat-card">
-          <div class="stat-label">🌧️ Lượng mưa</div>
+          <div class="stat-top">
+            <span class="stat-label">🌧️ Lượng mưa</span>
+          </div>
           <div class="stat-value" id="precip">-- mm</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-rain" id="precipMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="cloudCoverSub">Mây --%</div>
         </div>
+
         <div class="stat-card">
-          <div class="stat-label">☔ Khả năng mưa</div>
+          <div class="stat-top">
+            <span class="stat-label">☔ Khả năng mưa</span>
+          </div>
           <div class="stat-value" id="pop">--%</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-pop" id="popMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="visibilitySub">Tầm nhìn -- km</div>
         </div>
+
         <div class="stat-card">
-          <div class="stat-label">☀️ Chỉ số UV</div>
+          <div class="stat-top">
+            <span class="stat-label">☀️ Chỉ số UV</span>
+          </div>
           <div class="stat-value" id="uvStat">--</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-uv" id="uvMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="uvMaxSub">Cực đại --</div>
         </div>
+
         <div class="stat-card">
-          <div class="stat-label">🌿 Chất lượng KK</div>
+          <div class="stat-top">
+            <span class="stat-label">🌿 Chất lượng KK</span>
+          </div>
           <div class="stat-value" id="aqi">-- AQI</div>
+          <div class="stat-meter"><div class="stat-meter-fill fill-aqi" id="aqiMeter" style="width:0%"></div></div>
           <div class="stat-sub" id="pm25Sub">PM2.5: -- µg/m³</div>
         </div>
-      </div>
+      </section>
 
-      <!-- Sun & timezone -->
-      <div class="sun-times">
-        <span class="chip" id="sun">🌅 --:-- &mdash; 🌇 --:--</span>
-        <span class="chip" id="tzOffset">🕐 --</span>
-        <span class="chip" id="uvIndex" style="display:none">☀️ UV --</span>
-        <button class="chip meteo-map-trigger" id="btnMeteoMap" onclick="window.openMeteoMap && window.openMeteoMap()"
-          title="Mở bản đồ khí tượng trực tiếp kiểu Windy.com">🌐 Bản đồ Khí tượng Windy LIVE</button>
-      </div>
-
-      <!-- Hourly chart -->
-      <div class="section-header">
-        <span class="section-title">📈 Diễn biến 24 giờ tới (Nhiệt độ & Lượng mưa thực tế)</span>
-      </div>
-      <div class="hourly-chart-container">
-        <canvas id="hourlyChart"></canvas>
-      </div>
-
-      <!-- Hourly tiles -->
-      <div class="hourly-tiles" id="hourlyTiles"></div>
+      <!-- Hourly chart + tiles -->
+      <section class="forecast-section">
+        <div class="section-header">
+          <span class="section-title">📈 Diễn biến 24 giờ tới</span>
+          <div class="chart-legend-inline">
+            <span class="cli-item"><i class="cli-dot cli-temp"></i> Nhiệt độ (°C)</span>
+            <span class="cli-item"><i class="cli-dot cli-rain"></i> Lượng mưa (mm)</span>
+          </div>
+        </div>
+        <div class="hourly-chart-container">
+          <canvas id="hourlyChart"></canvas>
+        </div>
+        <div class="hourly-tiles" id="hourlyTiles"></div>
+      </section>
 
       <!-- 7-day forecast -->
-      <div class="section-header">
-        <span class="section-title">📅 Dự báo 7 ngày tiếp theo (Nhấn vào từng ngày để xem chi tiết)</span>
-      </div>
-      <div class="daily-forecast" id="dailyForecast"></div>
+      <section class="forecast-section">
+        <div class="section-header">
+          <span class="section-title">📅 Dự báo 7 ngày tiếp theo</span>
+          <span class="section-hint">Nhấn vào từng ngày để xem biểu đồ chi tiết 24h</span>
+        </div>
+        <div class="daily-forecast" id="dailyForecast"></div>
+      </section>
 
-    </div>
+    </main>
   </div>
 
   <!-- DETAIL MODAL -->
@@ -215,7 +254,7 @@
       <div class="modal-hourly-tiles" id="modalHourlyTiles"></div>
       <div style="margin-top:12px">
         <div
-          style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#bbb;margin-bottom:8px">
+          style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#64748b;margin-bottom:8px">
           7 Ngày tiếp theo</div>
         <div class="modal-daily-tiles" id="modalDailyTiles"></div>
       </div>
@@ -228,9 +267,9 @@
       <div class="meteo-map-wrap">
         <!-- Leaflet Basemap + Vector Borders -->
         <div id="meteoLeafletMap" class="meteo-leaflet"></div>
-        <!-- Color Heatmap Canvas (blended smoothly over terrain) -->
+        <!-- Color Heatmap Canvas -->
         <canvas id="meteoCanvas" class="meteo-canvas"></canvas>
-        <!-- Crisp Wind Particles & Labels Canvas (above borders, never darkened) -->
+        <!-- Crisp Wind Particles & Labels Canvas -->
         <canvas id="meteoTopCanvas" class="meteo-top-canvas"></canvas>
 
         <!-- Hover tooltip -->
@@ -239,7 +278,8 @@
         <!-- Compact Windy-style Bottom-Right Controls & Inline Color Scale -->
         <div class="windy-br-dock">
           <div class="windy-br-pills">
-            <button type="button" class="wbr-pill" id="wlpToggleIsobars" title="Bật/Tắt đường đẳng áp khí quyển">◌ Khí áp</button>
+            <button type="button" class="wbr-pill active" id="wlpToggleCities" title="Ẩn/Hiện nhãn nhiệt độ các tỉnh thành">🏷️ Tỉnh thành</button>
+            <button type="button" class="wbr-pill" id="wlpToggleIsobars" title="Bật/Tắt đường đẳng áp khí quyển">◌ Đẳng áp</button>
             <button type="button" class="wbr-pill active" id="wlpToggleParticles" title="Bật/Tắt chuyển động hạt gió">〰️ Hạt gió</button>
           </div>
           <div class="windy-scale-strip" id="meteoLegend">
@@ -258,9 +298,10 @@
       </div>
     </div>
   </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="script.js?v=7.2" defer></script>
-  <script src="meteo-map.js?v=7.2" defer></script>
+  <script src="script.js?v=8.0" defer></script>
+  <script src="meteo-map.js?v=8.0" defer></script>
   <noscript>
     <p style="text-align:center;padding:40px;font-family:sans-serif">Vui lòng bật JavaScript để sử dụng ứng dụng thời
       tiết.</p>

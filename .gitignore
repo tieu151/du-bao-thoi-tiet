@@ -1,0 +1,20 @@
+# IDE & Editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & temporary files
+*.log
+npm-debug.log*
+tmp/
+temp/
+
+# Unrelated local subfolder in workspace
+hsk-platform/
+node_modules/

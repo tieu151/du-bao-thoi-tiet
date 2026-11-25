@@ -222,62 +222,39 @@
     </div>
   </div>
 
-  <!-- METEOROLOGICAL MAP MODAL -->
-  <div class="meteo-modal" id="meteoModal" role="dialog" aria-modal="true" aria-label="Bản đồ khí tượng">
+  <!-- METEOROLOGICAL MAP MODAL (AUTHENTIC WINDY.COM FULL-BLEED LAYOUT) -->
+  <div class="meteo-modal" id="meteoModal" role="dialog" aria-modal="true" aria-label="Bản đồ khí tượng Windy">
     <div class="meteo-modal-inner">
-      <!-- Header -->
-      <div class="meteo-header">
-        <div class="meteo-title-row">
-          <div class="meteo-logo">
-            <span class="meteo-logo-icon">🌐</span>
-            <span>Bản đồ Khí tượng</span>
-            <span class="meteo-live-badge">● LIVE</span>
-          </div>
-          <div class="meteo-header-right">
-            <div class="meteo-time-display" id="meteoTime">--:--:--</div>
-            <button class="meteo-close-btn" id="meteoCloseBtn" title="Đóng">✕</button>
-          </div>
-        </div>
-        <!-- Layer switcher (ẩn đi để dùng panel mới) -->
-        <div class="meteo-layer-tabs" id="meteoLayerTabs" style="display:none;"></div>
-      </div>
-
-      <!-- Map container -->
       <div class="meteo-map-wrap">
+        <!-- Leaflet Basemap + Vector Borders -->
         <div id="meteoLeafletMap" class="meteo-leaflet"></div>
+        <!-- Color Heatmap Canvas (blended smoothly over terrain) -->
         <canvas id="meteoCanvas" class="meteo-canvas"></canvas>
-
-        <!-- Legend -->
-        <div class="meteo-legend" id="meteoLegend">
-          <div class="meteo-legend-title" id="meteoLegendTitle">Tốc độ gió (km/h)</div>
-          <div class="meteo-legend-bar" id="meteoLegendBar"></div>
-          <div class="meteo-legend-labels" id="meteoLegendLabels"></div>
-        </div>
-
-        <!-- Storm info panel -->
-        <div class="meteo-storm-panel" id="meteoStormPanel" style="display:none">
-          <div class="meteo-storm-title">CẢNH BÁO BÃO</div>
-          <div class="meteo-storm-list" id="meteoStormList"></div>
-        </div>
+        <!-- Crisp Wind Particles & Labels Canvas (above borders, never darkened) -->
+        <canvas id="meteoTopCanvas" class="meteo-top-canvas"></canvas>
 
         <!-- Hover tooltip -->
         <div class="meteo-tooltip" id="meteoTooltip" style="display:none"></div>
 
+        <!-- Compact Windy-style Bottom-Right Controls & Inline Color Scale -->
+        <div class="windy-br-dock">
+          <div class="windy-br-pills">
+            <button type="button" class="wbr-pill" id="wlpToggleIsobars" title="Bật/Tắt đường đẳng áp khí quyển">◌ Khí áp</button>
+            <button type="button" class="wbr-pill active" id="wlpToggleParticles" title="Bật/Tắt chuyển động hạt gió">〰️ Hạt gió</button>
+          </div>
+          <div class="windy-scale-strip" id="meteoLegend">
+            <span class="wss-unit" id="meteoLegendUnit">°C</span>
+            <div class="wss-bar" id="meteoLegendBar">
+              <div class="wss-labels" id="meteoLegendLabels"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Loading overlay -->
         <div class="meteo-loading" id="meteoLoading">
           <div class="meteo-spinner"></div>
-          <div class="meteo-loading-text">Đang tải dữ liệu khí tượng...</div>
+          <div class="meteo-loading-text">Đang đồng bộ lưới khí tượng thực tế Open-Meteo...</div>
         </div>
-      </div>
-
-      <!-- Info bar at bottom -->
-      <div class="meteo-infobar">
-        <div class="meteo-info-item" id="meteoInfoWind">💨 Gió: --</div>
-        <div class="meteo-info-item" id="meteoInfoTemp">🌡️ Nhiệt độ: --</div>
-        <div class="meteo-info-item" id="meteoInfoHumid">💧 Độ ẩm: --</div>
-        <div class="meteo-info-item" id="meteoInfoPressure">📊 Áp suất: --</div>
-        <div class="meteo-info-item" id="meteoInfoRain">🌧️ Mưa: --</div>
-        <div class="meteo-info-item meteo-source">Nguồn: Open-Meteo & GDACS</div>
       </div>
     </div>
   </div>

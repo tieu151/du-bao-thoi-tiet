@@ -15,11 +15,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://api.open-meteo.com">
+  <link rel="preconnect" href="https://geocoding-api.open-meteo.com">
   <link rel="preconnect" href="https://server.arcgisonline.com">
-  <link rel="dns-prefetch" href="https://server.arcgisonline.com">
+  <link rel="preconnect" href="https://services.arcgisonline.com">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css?v=8.0" />
+  <link rel="stylesheet" href="style.css?v=9.1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
 </head>
 
@@ -45,8 +47,8 @@
           <button id="btnClearSearch" class="btn-clear-search hidden" type="button" title="Xóa"
             aria-label="Xóa tìm kiếm">✕</button>
         </div>
-        <button id="btnSearch" title="Tìm kiếm">🔍</button>
-        <button id="btnLocate" class="btn-locate" title="Định vị GPS của tôi">📍</button>
+        <button id="btnSearch" type="button" title="Tìm kiếm">🔍</button>
+        <button id="btnLocate" type="button" class="btn-locate" title="Định vị GPS của tôi">📍</button>
       </div>
 
       <div class="meta" id="meta">Nhập địa chỉ hoặc nhấn 📍 để xem thời tiết thực tế.</div>
@@ -61,11 +63,10 @@
       <div class="mini-map-card">
         <div class="mini-map-header">
           <span class="small">🗺️ Bản đồ vị trí (Chạm để xem điểm bất kỳ)</span>
-          <button type="button" class="mini-map-expand" onclick="window.openMeteoMap && window.openMeteoMap()">Phóng to ↗</button>
+          <button type="button" class="mini-map-expand" id="btnMiniMapExpand">Phóng to ↗</button>
         </div>
         <div id="map"></div>
-        <button type="button" class="btn-windy-banner" id="btnMeteoMapLeft"
-          onclick="window.openMeteoMap && window.openMeteoMap()">
+        <button type="button" class="btn-windy-banner" id="btnMeteoMapLeft">
           <span class="bwb-icon">🌐</span>
           <span class="bwb-text">
             <strong>Mở Bản đồ Khí tượng Windy</strong>
@@ -136,7 +137,7 @@
             <span class="chip" id="tzOffset">🕐 --</span>
             <span class="chip" id="uvIndex" style="display:none">☀️ UV --</span>
           </div>
-          <button class="meteo-map-trigger" id="btnMeteoMap" onclick="window.openMeteoMap && window.openMeteoMap()"
+          <button type="button" class="meteo-map-trigger" id="btnMeteoMap"
             title="Mở bản đồ khí tượng trực tiếp kiểu Windy.com">
             <span>🌐</span> Bản đồ Khí tượng Windy LIVE
           </button>
@@ -261,7 +262,7 @@
     </div>
   </div>
 
-  <!-- METEOROLOGICAL MAP MODAL (AUTHENTIC WINDY.COM FULL-BLEED LAYOUT) -->
+  <!-- METEOROLOGICAL MAP MODAL (AUTHENTIC WINDY.COM v9.0 FULL-BLEED LAYOUT) -->
   <div class="meteo-modal" id="meteoModal" role="dialog" aria-modal="true" aria-label="Bản đồ khí tượng Windy">
     <div class="meteo-modal-inner">
       <div class="meteo-map-wrap">
@@ -275,8 +276,15 @@
         <!-- Hover tooltip -->
         <div class="meteo-tooltip" id="meteoTooltip" style="display:none"></div>
 
+        <!-- Non-blocking Toast / Sync Indicator -->
+        <div class="meteo-toast hidden" id="meteoToast"></div>
+
         <!-- Compact Windy-style Bottom-Right Controls & Inline Color Scale -->
-        <div class="windy-br-dock">
+        <div class="windy-br-dock" id="windyBrDock">
+          <div class="windy-opacity-row" title="Điều chỉnh độ đậm lớp màu thời tiết để nhìn rõ bản đồ bên dưới">
+            <span>Độ đậm màu</span>
+            <input type="range" id="windyOpacityRange" min="30" max="100" value="82" />
+          </div>
           <div class="windy-br-pills">
             <button type="button" class="wbr-pill active" id="wlpToggleCities" title="Ẩn/Hiện nhãn nhiệt độ các tỉnh thành">🏷️ Tỉnh thành</button>
             <button type="button" class="wbr-pill" id="wlpToggleIsobars" title="Bật/Tắt đường đẳng áp khí quyển">◌ Đẳng áp</button>
@@ -291,17 +299,17 @@
         </div>
 
         <!-- Loading overlay -->
-        <div class="meteo-loading" id="meteoLoading">
+        <div class="meteo-loading" id="meteoLoading" style="display:none">
           <div class="meteo-spinner"></div>
-          <div class="meteo-loading-text">Đang đồng bộ lưới khí tượng thực tế Open-Meteo...</div>
+          <div class="meteo-loading-text">Đang tải dữ liệu thực tế Open-Meteo...</div>
         </div>
       </div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="script.js?v=8.0" defer></script>
-  <script src="meteo-map.js?v=8.0" defer></script>
+  <script src="script.js?v=9.1" defer></script>
+  <script src="meteo-map.js?v=9.1" defer></script>
   <noscript>
     <p style="text-align:center;padding:40px;font-family:sans-serif">Vui lòng bật JavaScript để sử dụng ứng dụng thời
       tiết.</p>

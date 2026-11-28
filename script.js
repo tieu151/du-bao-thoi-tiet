@@ -8,13 +8,25 @@ const $ = id => document.getElementById(id);
 const setText = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
 const setMeter = (id, pct) => {
   const el = $(id);
-  if (el) el.style.width = `${Math.max(4, Math.min(100, Math.round(pct)))}%`;
+  if (el) el.style.width = `${Math.max(4, Math.min(100, Math.round(pct || 0)))}%`;
 };
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 let map, marker, hourlyChart = null, modalChartInstance = null, modalPrecipChartInstance = null;
 let currentWeatherData = null, currentAirQualityData = null, currentPlaceName = 'Hà Nội';
 let activeAcAbortCtrl = null;
 let activeWxAbortCtrl = null;
+let hourlyChartRenderSeq = 0;
+let modalChartRenderSeq  = 0;
+let activeRenderReqId    = 0;
 
 const CACHE_TTL_WEATHER = 10 * 60 * 1000;
 const CACHE_TTL_GEOCODE = 7 * 24 * 60 * 60 * 1000;
@@ -46,6 +58,41 @@ const weatherCache    = new Map();
 const airQualityCache = new Map();
 const acMemoryCache   = new Map();
 
+// Danh sách địa danh Việt Nam có sẵn tọa độ chuẩn giúp phản hồi gợi ý tức thì (0.1ms)
+const BUILTIN_VN_PLACES = [
+  { name: 'Hà Nội',        lat: 21.0285, lon: 105.8542, type: 'Thủ đô',           icon: '🏛️' },
+  { name: 'TP.HCM',        lat: 10.8231, lon: 106.6297, type: 'Thành phố TW',     icon: '🏙️' },
+  { name: 'Đà Nẵng',       lat: 16.0544, lon: 108.2022, type: 'Thành phố TW',     icon: '🌊' },
+  { name: 'Hải Phòng',     lat: 20.8449, lon: 106.6881, type: 'Thành phố cảng',   icon: '⚓' },
+  { name: 'Cần Thơ',       lat: 10.0452, lon: 105.7469, type: 'Thành phố TW',     icon: '🌴' },
+  { name: 'Huế',           lat: 16.4637, lon: 107.5909, type: 'Thành phố TW',     icon: '🏯' },
+  { name: 'Nha Trang, Khánh Hòa', lat: 12.2388, lon: 109.1967, type: 'Thành phố biển', icon: '🏖️' },
+  { name: 'Đà Lạt, Lâm Đồng',     lat: 11.9404, lon: 108.4583, type: 'Thành phố cao nguyên', icon: '🌲' },
+  { name: 'QĐ. Hoàng Sa, Đà Nẵng', lat: 16.5333, lon: 111.6167, type: 'Quần đảo Việt Nam', icon: '🏝️' },
+  { name: 'QĐ. Trường Sa, Khánh Hòa', lat: 8.6439, lon: 111.9189, type: 'Quần đảo Việt Nam', icon: '🏝️' },
+  { name: 'Phú Quốc, Kiên Giang', lat: 10.2899, lon: 103.9840, type: 'Thành phố đảo', icon: '🏝️' },
+  { name: 'Hạ Long, Quảng Ninh',  lat: 20.9517, lon: 107.0748, type: 'Thành phố vịnh', icon: '⛵' },
+  { name: 'Vinh, Nghệ An',        lat: 18.6734, lon: 105.6923, type: 'Thành phố',     icon: '🌇' },
+  { name: 'Thanh Hóa',            lat: 19.8067, lon: 105.7852, type: 'Tỉnh / TP',     icon: '📍' },
+  { name: 'Quy Nhơn, Bình Định',  lat: 13.7820, lon: 109.2194, type: 'Thành phố biển', icon: '🌊' },
+  { name: 'Vũng Tàu, Bà Rịa - Vũng Tàu', lat: 10.3460, lon: 107.0843, type: 'Thành phố biển', icon: '🏖️' },
+  { name: 'Buôn Ma Thuột, Đắk Lắk', lat: 12.6667, lon: 108.0500, type: 'Tây Nguyên',  icon: '☕' },
+  { name: 'Pleiku, Gia Lai',      lat: 13.9833, lon: 108.0000, type: 'Tây Nguyên',    icon: '⛰️' },
+  { name: 'Lào Cai (Sa Pa)',      lat: 22.4856, lon: 103.9707, type: 'Tây Bắc',       icon: '🏔️' },
+  { name: 'Hà Giang',             lat: 22.8233, lon: 104.9836, type: 'Đông Bắc',      icon: '🏔️' },
+  { name: 'Cà Mau',               lat: 9.1769,  lon: 105.1524, type: 'Cực Nam',       icon: '🌴' },
+  { name: 'Côn Đảo, Bà Rịa - Vũng Tàu', lat: 8.6833, lon: 106.6000, type: 'Huyện đảo', icon: '🏝️' }
+];
+
+function stripAccents(str) {
+  return String(str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
 function getWeatherEmoji(code, isDay = true) {
   if (code === 0) return isDay ? '☀️' : '🌙';
   if (code === 1) return isDay ? '🌤️' : '🌙';
@@ -62,7 +109,7 @@ function getWeatherEmoji(code, isDay = true) {
 function windDirectionFull(deg) {
   if (deg == null || isNaN(deg)) return 'Không rõ';
   const dirs = ['Bắc (N)', 'Đông Bắc (NE)', 'Đông (E)', 'Đông Nam (SE)', 'Nam (S)', 'Tây Nam (SW)', 'Tây (W)', 'Tây Bắc (NW)'];
-  return `Hướng ${dirs[Math.round(deg / 45) % 8]}`;
+  return `Hướng ${dirs[Math.round(((deg % 360) + 360) % 360 / 45) % 8]}`;
 }
 
 function getAqiInfo(aqi) {
@@ -122,12 +169,13 @@ function weatherToStyle(code, isDay) {
 
 function updateMiniMapMarkerBadge(lat, lon, placeName, tempStr, emoji) {
   if (!map || !window.L) return;
-  const shortPlace = (placeName || '').split(',')[0].trim();
+  const shortPlace = escapeHtml((placeName || '').split(',')[0].trim());
+  const safeTemp = escapeHtml(tempStr || '--°C');
   const html = `
     <div class="mini-wx-pin">
       <div class="mwp-bubble">
         <span>${emoji || '🌤️'}</span>
-        <strong>${tempStr || '--°C'}</strong>
+        <strong>${safeTemp}</strong>
         <small>${shortPlace}</small>
       </div>
       <div class="mwp-dot"></div>
@@ -148,8 +196,11 @@ function updateMiniMapMarkerBadge(lat, lon, placeName, tempStr, emoji) {
 }
 
 function initMap(lat = 21.0285, lon = 105.8542) {
+  const mapContainer = $('map');
+  if (!mapContainer || !window.L) return;
+
   if (!map) {
-    map = L.map('map', {
+    map = L.map(mapContainer, {
       zoomControl: true,
       attributionControl: false
     }).setView([lat, lon], 9);
@@ -165,17 +216,19 @@ function initMap(lat = 21.0285, lon = 105.8542) {
       const coordLabel = `${cLat.toFixed(2)}°N, ${cLng.toFixed(2)}°E`;
       setText('meta', `📍 Đang tải thời tiết thực tế tại ${coordLabel}...`);
 
+      const reqToken = activeRenderReqId + 1;
       fetchWeatherAndRender(cLat, cLng, `Tọa độ (${coordLabel})`);
 
       fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${cLat}&lon=${cLng}&zoom=14&addressdetails=1&accept-language=vi`)
         .then(res => res.ok ? res.json() : null)
         .then(data => {
-          if (!data) return;
+          if (!data || activeRenderReqId !== reqToken) return;
           const placeName = shortDisplay(data) || data.display_name?.split(',').slice(0, 3).join(',').trim();
           if (placeName) {
             currentPlaceName = placeName;
             setText('location', placeName);
             setText('meta', `✅ Thời tiết thực tế tại: ${placeName}`);
+            lsSet('last_location_v3', { lat: cLat, lon: cLng, name: placeName }, 30 * 24 * 60 * 60 * 1000);
             if (currentWeatherData?.current) {
               const cur = currentWeatherData.current;
               updateMiniMapMarkerBadge(
@@ -197,8 +250,20 @@ function initMap(lat = 21.0285, lon = 105.8542) {
 
 async function lookup(q) {
   try {
+    const qTrim = q.trim();
+    const qNorm = stripAccents(qTrim);
+
+    // Khớp tức thì 0ms với danh sách tỉnh/thành phố/đảo nội bộ nếu trùng tên
+    const localHit = BUILTIN_VN_PLACES.find(p =>
+      stripAccents(p.name) === qNorm || stripAccents(p.name.split(',')[0]) === qNorm
+    );
+    if (localHit) {
+      setText('meta', `✅ Đã chọn: ${localHit.name}`);
+      return { name: localHit.name, lat: localHit.lat, lon: localHit.lon };
+    }
+
     setText('meta', '🔍 Đang định vị địa điểm...');
-    const cacheKey = `geo_v2_${q.toLowerCase().trim()}`;
+    const cacheKey = `geo_v2_${qTrim.toLowerCase()}`;
     if (geocodeCache.has(cacheKey)) {
       const cached = geocodeCache.get(cacheKey);
       setText('meta', `✅ Đã chọn: ${cached.name}`);
@@ -212,8 +277,8 @@ async function lookup(q) {
     }
 
     const [omLoc, nomLoc] = await Promise.all([
-      lookupOpenMeteo(q),
-      lookupNominatim(q)
+      lookupOpenMeteo(qTrim),
+      lookupNominatim(qTrim)
     ]);
 
     const loc = omLoc || nomLoc;
@@ -278,7 +343,7 @@ function showSkeleton() {
     $('rightPanel')?.classList.add('hidden');
   } else {
     const rp = $('rightPanel');
-    if (rp) rp.style.opacity = '0.65';
+    if (rp) rp.style.opacity = '0.68';
   }
 }
 
@@ -291,6 +356,7 @@ function hideSkeleton() {
   }
 }
 
+// So khớp giờ chính xác theo đúng múi giờ địa phương của tọa độ đang xem (không bị lệch múi giờ trình duyệt!)
 function findCurrentHourlyIndex(weather) {
   if (!weather?.hourly?.time?.length) return 0;
   const curTimeStr = weather.current?.time || weather.current_weather?.time;
@@ -299,34 +365,25 @@ function findCurrentHourlyIndex(weather) {
     const idx = weather.hourly.time.findIndex(t => t.slice(0, 13) === hourPrefix);
     if (idx !== -1) return idx;
   }
-  const nowMs = Date.now();
-  let bestIdx = 0;
-  let minDiff = Infinity;
-  for (let i = 0; i < weather.hourly.time.length; i++) {
-    const diff = Math.abs(new Date(weather.hourly.time[i]).getTime() - nowMs);
-    if (diff < minDiff) {
-      minDiff = diff;
-      bestIdx = i;
-    }
-  }
-  return bestIdx;
+  return 0;
 }
 
 function highlightActiveSuggestion(placeName) {
   const box = $('suggestion-box');
   if (!box) return;
-  const norm = (placeName || '').toLowerCase();
+  const norm = stripAccents(placeName || '');
   box.querySelectorAll('.example').forEach(btn => {
-    const q = (btn.dataset.name || '').toLowerCase();
-    btn.classList.toggle('active', q && norm.includes(q));
+    const q = stripAccents(btn.dataset.name || '');
+    btn.classList.toggle('active', Boolean(q && norm.includes(q)));
   });
 }
 
 async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) {
   const numLat = Number(lat);
   const numLon = Number(lon);
-  if (isNaN(numLat) || isNaN(numLon)) return;
+  if (!Number.isFinite(numLat) || !Number.isFinite(numLon)) return;
 
+  const myReqId = ++activeRenderReqId;
   currentPlaceName = placeName || currentPlaceName;
   highlightActiveSuggestion(currentPlaceName);
   showSkeleton();
@@ -453,6 +510,8 @@ async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) 
     return;
   }
 
+  if (myReqId !== activeRenderReqId) return;
+
   hideSkeleton();
   if (weather && !weather.error) {
     currentWeatherData = weather;
@@ -469,30 +528,66 @@ async function fetchWeatherAndRender(lat, lon, placeName, forceRefresh = false) 
   }
 }
 
-let chartJsLoaded = false;
+let chartJsPromise = null;
 function loadChartJS() {
-  if (chartJsLoaded || window.Chart) {
-    chartJsLoaded = true;
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
+  if (window.Chart) return Promise.resolve();
+  if (chartJsPromise) return chartJsPromise;
+  chartJsPromise = new Promise((resolve, reject) => {
+    // Nếu thẻ script defer trong head đang tải, chờ sự kiện load trước khi tạo thêm script
+    const existing = document.querySelector('script[src*="chart.umd.min.js"]');
+    if (existing) {
+      const check = setInterval(() => {
+        if (window.Chart) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 30);
+      setTimeout(() => {
+        clearInterval(check);
+        if (window.Chart) resolve();
+        else {
+          chartJsPromise = null;
+          reject(new Error('Chart.js load timeout'));
+        }
+      }, 6000);
+      return;
+    }
     const s = document.createElement('script');
     s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-    s.onload = () => { chartJsLoaded = true; resolve(); };
-    s.onerror = reject;
+    s.onload = () => resolve();
+    s.onerror = err => { chartJsPromise = null; reject(err); };
     document.head.appendChild(s);
   });
+  return chartJsPromise;
+}
+
+function safeDestroyChartOnCanvas(canvasEl, instanceRef) {
+  if (instanceRef) {
+    try { instanceRef.destroy(); } catch (_) {}
+  }
+  if (window.Chart && typeof window.Chart.getChart === 'function' && canvasEl) {
+    const existing = window.Chart.getChart(canvasEl);
+    if (existing) {
+      try { existing.destroy(); } catch (_) {}
+    }
+  }
 }
 
 async function renderHourlyChart(weather) {
   const canvas = $('hourlyChart');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  await loadChartJS();
-  if (hourlyChart) {
-    hourlyChart.destroy();
-    hourlyChart = null;
+  if (!canvas || !weather?.hourly?.time?.length) return;
+  const mySeq = ++hourlyChartRenderSeq;
+
+  try {
+    await loadChartJS();
+  } catch (_) {
+    return;
   }
+  if (mySeq !== hourlyChartRenderSeq) return;
+
+  safeDestroyChartOnCanvas(canvas, hourlyChart);
+  hourlyChart = null;
+  const ctx = canvas.getContext('2d');
 
   const sIdx = findCurrentHourlyIndex(weather);
   const labels = [], temps = [], precips = [], pops = [];
@@ -503,7 +598,7 @@ async function renderHourlyChart(weather) {
     const rawTime = weather.hourly.time[idx];
     const hourStr = rawTime.slice(11, 16) || '00:00';
     labels.push(i === 0 ? 'Bây giờ' : hourStr);
-    temps.push(Number(weather.hourly.temperature_2m[idx].toFixed(1)));
+    temps.push(Number((weather.hourly.temperature_2m?.[idx] ?? 0).toFixed(1)));
     precips.push(Number((weather.hourly.precipitation?.[idx] || 0).toFixed(2)));
     pops.push(weather.hourly.precipitation_probability?.[idx] ?? 0);
   }
@@ -543,7 +638,7 @@ async function renderHourlyChart(weather) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 300 },
+      animation: { duration: 220 },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
@@ -612,7 +707,7 @@ function setupDragScroll(el) {
 
 function renderHourlyTiles(weather) {
   const container = $('hourlyTiles');
-  if (!container) return;
+  if (!container || !weather?.hourly?.time?.length) return;
   container.innerHTML = '';
   setupDragScroll(container);
 
@@ -624,9 +719,9 @@ function renderHourlyTiles(weather) {
     if (idx >= weather.hourly.time.length) break;
     const rawTime = weather.hourly.time[idx];
     const hour = rawTime.slice(11, 16) || '00:00';
-    const temp = Math.round(weather.hourly.temperature_2m[idx]);
+    const temp = Math.round(weather.hourly.temperature_2m?.[idx] ?? 0);
     const isDayHour = weather.hourly.is_day ? weather.hourly.is_day[idx] === 1 : true;
-    const icon = wmoToIcon(weather.hourly.weathercode[idx], isDayHour);
+    const icon = wmoToIcon(weather.hourly.weathercode?.[idx] ?? 0, isDayHour);
     const pop = weather.hourly.precipitation_probability?.[idx] ?? 0;
     const wind = Math.round(weather.hourly.wind_speed_10m?.[idx] ?? 0);
 
@@ -646,7 +741,7 @@ function renderHourlyTiles(weather) {
 
 function renderDailyForecast(weather) {
   const c = $('dailyForecast');
-  if (!c || !weather.daily?.time) return;
+  if (!c || !weather.daily?.time?.length) return;
   c.innerHTML = '';
 
   const count = Math.min(7, weather.daily.time.length);
@@ -698,7 +793,8 @@ function renderDailyForecast(weather) {
 
 async function showDetailModal(weather, airQuality, dayIndex) {
   const modal = $('detailModal');
-  if (!modal || !weather.daily?.time?.[dayIndex]) return;
+  if (!modal || !weather?.daily?.time?.[dayIndex]) return;
+  const mySeq = ++modalChartRenderSeq;
 
   const targetDateStr = weather.daily.time[dayIndex];
   const selectedDate = new Date(targetDateStr + 'T00:00:00');
@@ -710,7 +806,7 @@ async function showDetailModal(weather, airQuality, dayIndex) {
   });
 
   const dayHours = [];
-  for (let i = 0; i < weather.hourly.time.length; i++) {
+  for (let i = 0; i < (weather.hourly?.time?.length || 0); i++) {
     const tStr = weather.hourly.time[i];
     if (tStr.startsWith(targetDateStr)) {
       dayHours.push({
@@ -756,77 +852,6 @@ async function showDetailModal(weather, airQuality, dayIndex) {
     feelsEl.textContent = `Cảm giác TB ${avgFeels}°C · Gió tối đa ${Math.round(windMaxDay || 0)} km/h${uvMaxDay != null ? ` · UV ${uvMaxDay.toFixed(1)}` : ''}`;
   }
 
-  await loadChartJS();
-
-  const ctxTemp = $('modalChart')?.getContext('2d');
-  if (ctxTemp) {
-    if (modalChartInstance) {
-      modalChartInstance.destroy();
-      modalChartInstance = null;
-    }
-    modalChartInstance = new Chart(ctxTemp, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Nhiệt độ (°C)',
-          data: temps,
-          borderColor: '#ea580c',
-          backgroundColor: 'rgba(234,88,12,0.14)',
-          tension: 0.36,
-          pointRadius: 3.5,
-          fill: true
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
-          tooltip: { callbacks: { label: c => `🌡️ ${c.raw}°C` } }
-        },
-        scales: {
-          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => v + '°' } },
-          x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 12 } }
-        }
-      }
-    });
-  }
-
-  const ctxPrecip = $('modalPrecipChart')?.getContext('2d');
-  if (ctxPrecip) {
-    if (modalPrecipChartInstance) {
-      modalPrecipChartInstance.destroy();
-      modalPrecipChartInstance = null;
-    }
-    modalPrecipChartInstance = new Chart(ctxPrecip, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Lượng mưa thực tế / dự báo (mm)',
-          data: precips,
-          backgroundColor: 'rgba(2, 132, 199, 0.58)',
-          borderColor: '#0284c7',
-          borderWidth: 1,
-          borderRadius: 4
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
-          tooltip: { callbacks: { label: c => `🌧️ ${c.raw} mm (XS: ${dayHours[c.dataIndex]?.pop ?? 0}%)` } }
-        },
-        scales: {
-          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, suggestedMax: 3, ticks: { callback: v => v + 'mm' } },
-          x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 12 } }
-        }
-      }
-    });
-  }
-
   const modalHourly = $('modalHourlyTiles');
   if (modalHourly) {
     modalHourly.innerHTML = '';
@@ -866,6 +891,78 @@ async function showDetailModal(weather, airQuality, dayIndex) {
   }
 
   modal.classList.add('show');
+
+  try {
+    await loadChartJS();
+  } catch (_) {
+    return;
+  }
+  if (mySeq !== modalChartRenderSeq) return;
+
+  const canvasTemp = $('modalChart');
+  if (canvasTemp) {
+    safeDestroyChartOnCanvas(canvasTemp, modalChartInstance);
+    modalChartInstance = new Chart(canvasTemp.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Nhiệt độ (°C)',
+          data: temps,
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234,88,12,0.14)',
+          tension: 0.36,
+          pointRadius: 3.5,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        plugins: {
+          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
+          tooltip: { callbacks: { label: c => `🌡️ ${c.raw}°C` } }
+        },
+        scales: {
+          y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { callback: v => v + '°' } },
+          x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 12 } }
+        }
+      }
+    });
+  }
+
+  const canvasPrecip = $('modalPrecipChart');
+  if (canvasPrecip) {
+    safeDestroyChartOnCanvas(canvasPrecip, modalPrecipChartInstance);
+    modalPrecipChartInstance = new Chart(canvasPrecip.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Lượng mưa thực tế / dự báo (mm)',
+          data: precips,
+          backgroundColor: 'rgba(2, 132, 199, 0.58)',
+          borderColor: '#0284c7',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        plugins: {
+          legend: { display: true, labels: { font: { size: 12, weight: '700' } } },
+          tooltip: { callbacks: { label: c => `🌧️ ${c.raw} mm (XS: ${dayHours[c.dataIndex]?.pop ?? 0}%)` } }
+        },
+        scales: {
+          y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, suggestedMax: 3, ticks: { callback: v => v + 'mm' } },
+          x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 12 } }
+        }
+      }
+    });
+  }
 }
 
 function render(weather, airQuality, placeName) {
@@ -873,7 +970,7 @@ function render(weather, airQuality, placeName) {
 
   const rp = $('rightPanel');
   if (rp) rp.classList.remove('hidden');
-  if (map) setTimeout(() => map.invalidateSize(), 100);
+  if (map) setTimeout(() => map.invalidateSize(), 80);
 
   const cur = weather.current || {};
   const cw = weather.current_weather || {};
@@ -986,18 +1083,21 @@ function render(weather, airQuality, placeName) {
   }
   setText('pm25Sub', pm25Val != null ? `PM2.5: ${Number(pm25Val).toFixed(1)} µg/m³` : 'Chuẩn Châu Âu');
 
-  // Cảnh báo mưa ngắn hạn 15 phút
+  // Cảnh báo mưa ngắn hạn 15 phút (so sánh chính xác theo giờ địa phương từ Open-Meteo `current.time`)
   let nowcastTxt = '';
-  const now = new Date();
-  if (weather.minutely_15?.precipitation && weather.minutely_15?.time) {
-    for (let i = 0; i < weather.minutely_15.time.length; i++) {
-      const t = new Date(weather.minutely_15.time[i]);
-      if (t >= now && t <= new Date(now.getTime() + 90 * 60 * 1000)) {
-        const p15 = weather.minutely_15.precipitation[i];
-        if (p15 > 0.1) {
-          const mins = Math.max(1, Math.round((t - now) / 60000));
-          nowcastTxt = `⚠️ Cảnh báo thực tế: Dự kiến có mưa (${p15.toFixed(1)} mm) trong khoảng ${mins} phút tới.`;
-          break;
+  const curIso = cur.time || cw.time;
+  if (curIso && weather.minutely_15?.precipitation && weather.minutely_15?.time) {
+    const baseLocalMs = new Date(curIso).getTime();
+    if (Number.isFinite(baseLocalMs)) {
+      for (let i = 0; i < weather.minutely_15.time.length; i++) {
+        const slotMs = new Date(weather.minutely_15.time[i]).getTime();
+        const diffMin = Math.round((slotMs - baseLocalMs) / 60000);
+        if (diffMin >= 0 && diffMin <= 90) {
+          const p15 = weather.minutely_15.precipitation[i];
+          if (p15 > 0.1) {
+            nowcastTxt = `⚠️ Cảnh báo thực tế: Dự kiến có mưa (${p15.toFixed(1)} mm) trong khoảng ${Math.max(5, diffMin)} phút tới.`;
+            break;
+          }
         }
       }
     }
@@ -1024,6 +1124,7 @@ function render(weather, airQuality, placeName) {
     : '';
   setText('tzOffset', `🕐 ${tz.split('/').pop().replace(/_/g, ' ')} (${utcOffset})`);
 
+  const now = new Date();
   setText('timeNow', now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + now.toLocaleDateString('vi-VN'));
 
   renderHourlyChart(weather);
@@ -1043,7 +1144,7 @@ function render(weather, airQuality, placeName) {
 }
 
 // ══════════════════════════════════════════════
-//  FAST AUTOCOMPLETE ENGINE
+//  INSTANT + PARALLEL AUTOCOMPLETE ENGINE
 // ══════════════════════════════════════════════
 
 let acDebounce = null;
@@ -1074,9 +1175,28 @@ function shortDisplay(item) {
   return (item.display_name || '').split(',').slice(0, 3).join(',').trim();
 }
 
+function matchBuiltinPlaces(q) {
+  const qNorm = stripAccents(q.trim());
+  if (!qNorm) return [];
+  return BUILTIN_VN_PLACES
+    .filter(p => stripAccents(p.name).includes(qNorm))
+    .slice(0, 5)
+    .map(p => ({
+      displayName: p.name,
+      fullName: p.name + ', Việt Nam',
+      lat: p.lat,
+      lon: p.lon,
+      type: p.type,
+      icon: p.icon,
+      isVN: true
+    }));
+}
+
 async function fetchAutocomplete(q, signal) {
   const cacheKey = q.toLowerCase().trim();
   if (acMemoryCache.has(cacheKey)) return acMemoryCache.get(cacheKey);
+
+  const localMatches = matchBuiltinPlaces(q);
 
   const omPromise = fetch(
     `${GEOCODE_URL_OM}?name=${encodeURIComponent(q)}&count=6&language=vi&format=json`,
@@ -1123,10 +1243,10 @@ async function fetchAutocomplete(q, signal) {
 
   const [omList, nomList] = await Promise.all([omPromise, nomPromise]);
 
-  const combined = [...nomList, ...omList].sort((a, b) => (b.isVN ? 1 : 0) - (a.isVN ? 1 : 0));
+  const combined = [...localMatches, ...nomList, ...omList].sort((a, b) => (b.isVN ? 1 : 0) - (a.isVN ? 1 : 0));
   const deduped = [];
   for (const item of combined) {
-    if (!item.displayName) continue;
+    if (!item.displayName || !Number.isFinite(item.lat) || !Number.isFinite(item.lon)) continue;
     const exists = deduped.some(d =>
       Math.hypot(d.lat - item.lat, d.lon - item.lon) < 0.03 ||
       d.displayName.toLowerCase() === item.displayName.toLowerCase()
@@ -1146,14 +1266,25 @@ function getOrCreateDropdown() {
     el.id = 'ac-dropdown';
     el.className = 'ac-dropdown';
     const searchDiv = document.querySelector('.search');
-    searchDiv.style.position = 'relative';
-    searchDiv.appendChild(el);
+    if (searchDiv) {
+      searchDiv.style.position = 'relative';
+      searchDiv.appendChild(el);
+    }
   }
   return el;
 }
 
+function highlightSafeHtml(text, query) {
+  const safeText = escapeHtml(text);
+  const safeQuery = escapeHtml(query.trim());
+  if (!safeQuery) return safeText;
+  const escRe = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safeText.replace(new RegExp(`(${escRe})`, 'gi'), '<mark>$1</mark>');
+}
+
 function renderDropdown(items, query) {
   const dd = getOrCreateDropdown();
+  if (!dd) return;
   acActive = -1;
 
   if (!items.length) {
@@ -1162,22 +1293,19 @@ function renderDropdown(items, query) {
     return;
   }
 
-  const esc = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(${esc})`, 'gi');
-
   dd.innerHTML = '';
   items.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'ac-item';
     row.dataset.idx = i;
 
-    const highlighted = item.displayName.replace(re, '<mark>$1</mark>');
+    const highlighted = highlightSafeHtml(item.displayName, query);
 
     row.innerHTML = `
       <span class="ac-icon">${item.icon}</span>
       <span class="ac-text">
         <span class="ac-main">${highlighted}</span>
-        <span class="ac-sub">${item.type} · ${item.lat.toFixed(2)}°N, ${item.lon.toFixed(2)}°E</span>
+        <span class="ac-sub">${escapeHtml(item.type)} · ${item.lat.toFixed(2)}°N, ${item.lon.toFixed(2)}°E</span>
       </span>
     `;
 
@@ -1197,7 +1325,7 @@ function renderDropdown(items, query) {
 
 function openDropdown() {
   const dd = getOrCreateDropdown();
-  dd.classList.add('open');
+  if (dd) dd.classList.add('open');
   acOpen = true;
 }
 
@@ -1241,9 +1369,16 @@ function onAddressInput(e) {
     return;
   }
 
-  const dd = getOrCreateDropdown();
-  dd.innerHTML = '<div class="ac-loading"><span class="ac-spinner"></span> Đang tìm nhanh...</div>';
-  openDropdown();
+  // Phản hồi TỨC THÌ 0ms từ danh sách nội bộ trước khi API mạng trả về!
+  const instantLocal = matchBuiltinPlaces(q);
+  if (instantLocal.length > 0) {
+    acResults = instantLocal;
+    renderDropdown(instantLocal, q);
+  } else {
+    const dd = getOrCreateDropdown();
+    if (dd) dd.innerHTML = '<div class="ac-loading"><span class="ac-spinner"></span> Đang tìm nhanh...</div>';
+    openDropdown();
+  }
 
   acDebounce = setTimeout(async () => {
     try {
@@ -1253,16 +1388,17 @@ function onAddressInput(e) {
       acResults = results;
       renderDropdown(results, q);
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        dd.innerHTML = '<div class="ac-empty">Lỗi kết nối, vui lòng thử lại.</div>';
+      if (err.name !== 'AbortError' && !instantLocal.length) {
+        const dd = getOrCreateDropdown();
+        if (dd) dd.innerHTML = '<div class="ac-empty">Lỗi kết nối, vui lòng thử lại.</div>';
       }
     }
-  }, 140);
+  }, 110);
 }
 
 function onAddressKeydown(e) {
   if (!acOpen) {
-    if (e.key === 'Enter') doSearch($('address').value);
+    if (e.key === 'Enter') doSearch($('address')?.value);
     return;
   }
 
@@ -1283,7 +1419,7 @@ function onAddressKeydown(e) {
       selectItem(acResults[0]);
     } else {
       closeDropdown();
-      doSearch($('address').value);
+      doSearch($('address')?.value);
     }
   } else if (e.key === 'Escape') {
     closeDropdown();
@@ -1325,6 +1461,7 @@ function setDefaultSuggestions() {
   box.innerHTML = '';
   QUICK_LOCATIONS.forEach(loc => {
     const b = document.createElement('button');
+    b.type = 'button';
     b.className = 'example';
     b.dataset.name = loc.name;
     b.textContent = loc.label;
@@ -1351,6 +1488,7 @@ function locateUser() {
       if (!map) initMap(lat, lon);
       else map.setView([lat, lon], 11);
 
+      const reqToken = activeRenderReqId + 1;
       const wxPromise = fetchWeatherAndRender(lat, lon, 'Vị trí GPS của bạn');
       const geoPromise = fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1&accept-language=vi`
@@ -1359,7 +1497,7 @@ function locateUser() {
         .catch(() => null);
 
       const [, geo] = await Promise.all([wxPromise, geoPromise]);
-      if (geo) {
+      if (geo && activeRenderReqId === reqToken) {
         const shortName = shortDisplay(geo) || 'Vị trí hiện tại';
         currentPlaceName = shortName;
         setText('location', shortName);
